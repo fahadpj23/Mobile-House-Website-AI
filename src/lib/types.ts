@@ -1,14 +1,51 @@
-export interface Specification {
-  key: string;
-  value: string;
+// ===== Product =====
+export interface Product {
+  id?: string;
+  name: string;
+  description: string;
+  price: number;
+  discountPrice?: number;
+  images: string[];
+  category: string; // slug of the category
+  brand: string;
+  stock: number;
+  specifications?: { key: string; value: string }[];
+  isSpecialOffer?: boolean;
+  isFeatured?: boolean;
+  series?: string;
+  seriesName?: string;
+  totalSold?: number;
+  createdAt?: number;
+  updatedAt?: number;
 }
 
+// ===== Customer =====
+export interface Customer {
+  id?: string; // Firebase Auth UID
+  email: string;
+  name?: string;
+  photoURL?: string;
+  phone?: string;
+  provider?: "password" | "google";
+  createdAt?: number;
+  updatedAt?: number;
+}
+// ===== Category =====
+export interface Category {
+  id?: string;
+  name: string;
+  slug: string;
+  createdAt?: number;
+}
+
+// ===== Spec Template (used in categories) =====
 export interface SpecTemplate {
   key: string;
-  required?: boolean;
   placeholder?: string;
+  required?: boolean;
 }
 
+// ===== Category Spec (stored in Firestore) =====
 export interface CategorySpec {
   id?: string;
   categorySlug: string;
@@ -17,6 +54,7 @@ export interface CategorySpec {
   updatedAt?: number;
 }
 
+// ===== Brand =====
 export interface Brand {
   id?: string;
   name: string;
@@ -25,43 +63,32 @@ export interface Brand {
   createdAt?: number;
 }
 
-export interface Product {
+// ===== Banner =====
+export interface Banner {
   id?: string;
-  name: string;
-  brand: string;
-  price: number;
-  discountPrice?: number;
-  category: string;
-  subCategory?: string;
-  description: string;
-  stock: number;
-  images: string[];
-  specifications: Specification[];
-  featured?: boolean;
+  title: string;
+  subtitle?: string;
+  imageUrl: string;
+  link?: string;
+  position: "hero" | "mid" | "bottom";
+  active: boolean;
+  order?: number;
   createdAt?: number;
-  updatedAt?: number;
 }
 
-export interface Category {
+// ===== Special Offer =====
+export interface SpecialOffer {
   id?: string;
-  name: string;
-  slug: string;
-  image?: string;
+  title: string;
+  description?: string;
+  imageUrl: string;
+  link?: string;
+  discount?: string;
+  active: boolean;
+  createdAt?: number;
 }
 
-export interface CartItem {
-  product: Product;
-  quantity: number;
-}
-
-export interface OrderItem {
-  productId: string;
-  name: string;
-  price: number;
-  quantity: number;
-  image: string;
-}
-
+// ===== Order =====
 export type OrderStatus =
   | "pending"
   | "confirmed"
@@ -72,6 +99,14 @@ export type OrderStatus =
 
 export type PaymentMethod = "cod" | "card" | "bkash" | "nagad";
 
+export interface OrderItem {
+  productId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  image: string;
+}
+
 export interface Order {
   id?: string;
   userId: string;
@@ -79,7 +114,7 @@ export interface Order {
   total: number;
   status: OrderStatus;
   paymentMethod: PaymentMethod;
-  paymentStatus: "unpaid" | "paid";
+  paymentStatus: "paid" | "unpaid";
   shipping: {
     name: string;
     phone: string;

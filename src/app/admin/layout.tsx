@@ -7,7 +7,9 @@ import {
   FolderTree,
   ShoppingBag,
   Tag,
+  Percent,
   LogOut,
+  Image,
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import AdminGuard from "@/components/AdminGuard";
@@ -17,6 +19,8 @@ const links = [
   { href: "/admin/products", label: "Products", icon: Package },
   { href: "/admin/categories", label: "Categories", icon: FolderTree },
   { href: "/admin/brands", label: "Brands", icon: Tag },
+  { href: "/admin/banners", label: "Banners", icon: Image }, // NEW
+  { href: "/admin/offers", label: "Special Offers", icon: Percent },
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
 ];
 

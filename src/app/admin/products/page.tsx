@@ -60,11 +60,13 @@ export default function AdminProducts() {
               {products.map((p) => (
                 <tr key={p.id} className="border-t">
                   <td className="p-3">
-                    <img
-                      src={p.images[0]}
-                      alt=""
-                      className="w-10 h-10 rounded object-cover"
-                    />
+                    {p.images?.length && (
+                      <img
+                        src={p.images[0]}
+                        alt=""
+                        className="w-10 h-10 rounded object-cover"
+                      />
+                    )}
                   </td>
                   <td className="p-3 font-medium">{p.name}</td>
                   <td className="p-3">{p.category}</td>

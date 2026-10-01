@@ -53,6 +53,7 @@ export default function AdminCategories() {
     <div className="max-w-4xl">
       <h1 className="text-2xl font-bold mb-6">Categories & Specifications</h1>
 
+      {/* Add new category */}
       <form onSubmit={handleAdd} className="flex gap-2 mb-6">
         <input
           placeholder="Category name (e.g. Smartphones)"
@@ -65,6 +66,7 @@ export default function AdminCategories() {
         </button>
       </form>
 
+      {/* List categories */}
       <div className="card divide-y">
         {categories.map((c) => (
           <div key={c.id} className="p-4">
@@ -116,7 +118,7 @@ export default function AdminCategories() {
   );
 }
 
-// ==== Spec Editor ====
+// ===== Spec Editor =====
 function SpecEditor({
   category,
   initial,
@@ -127,11 +129,12 @@ function SpecEditor({
   onSave: (specs: SpecTemplate[]) => Promise<void>;
 }) {
   const [list, setList] = useState<SpecTemplate[]>(
-    initial.length ? initial : [{ key: "", placeholder: "" }],
+    initial.length ? initial : [{ key: "", placeholder: "", required: false }],
   );
   const [saving, setSaving] = useState(false);
 
-  const add = () => setList((l) => [...l, { key: "", placeholder: "" }]);
+  const add = () =>
+    setList((l) => [...l, { key: "", placeholder: "", required: false }]);
 
   const update = (
     i: number,

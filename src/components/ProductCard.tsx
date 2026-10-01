@@ -14,34 +14,57 @@ export default function ProductCard({ product }: { product: Product }) {
   };
 
   const price = product.discountPrice || product.price;
+  const hasDiscount =
+    !!product.discountPrice && product.discountPrice < product.price;
 
   return (
     <Link
       href={`/products/${product.id}`}
-      className="card overflow-hidden group"
+      className="card overflow-hidden group flex flex-col"
     >
-      <div className="bg-gray-100 aspect-square overflow-hidden">
+      {/* Image box — fixed square, padded, contain */}
+      <div className="bg-gray-50 aspect-square relative flex items-center justify-center p-3 overflow-hidden">
         <img
           src={product.images?.length ? product.images[0] : "/placeholder.png"}
           alt={product.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition"
+          className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform duration-300"
         />
+        {hasDiscount && (
+          <span className="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+            -
+            {Math.round(
+              ((product.price - product.discountPrice!) / product.price) * 100,
+            )}
+            %
+          </span>
+        )}
+        {product.seriesName && (
+          <span className="absolute top-2 right-2 bg-blue-600/90 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
+            {product.seriesName}
+          </span>
+        )}
       </div>
-      <div className="p-4">
-        <p className="text-xs text-gray-500">{product.brand}</p>
-        <h3 className="font-semibold line-clamp-2">{product.name}</h3>
-        <div className="flex items-center gap-2 mt-2">
-          <span className="text-lg font-bold text-blue-600">৳{price}</span>
-          {product.discountPrice && (
-            <span className="text-sm line-through text-gray-400">
+
+      {/* Info */}
+      <div className="p-3 flex-1 flex flex-col">
+        <p className="text-[11px] text-gray-500 truncate">{product.brand}</p>
+        <h3 className="text-sm font-medium line-clamp-2 mt-0.5 leading-snug">
+          {product.name}
+        </h3>
+
+        <div className="flex items-baseline gap-1.5 mt-2">
+          <span className="text-base font-bold text-blue-600">৳{price}</span>
+          {hasDiscount && (
+            <span className="text-xs line-through text-gray-400">
               ৳{product.price}
             </span>
           )}
         </div>
+
         <button
           onClick={handleAdd}
           disabled={product.stock <= 0}
-          className="btn-primary w-full mt-3 text-sm disabled:bg-gray-400"
+          className="btn-primary w-full mt-2 text-xs py-1.5 disabled:bg-gray-400"
         >
           {product.stock > 0 ? "Add to Cart" : "Out of Stock"}
         </button>
