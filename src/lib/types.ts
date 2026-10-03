@@ -1,82 +1,103 @@
-// ===== Product =====
-export interface Product {
-  id?: string;
-  name: string;
-  description: string;
-  price: number;
-  discountPrice?: number;
-  images: string[];
-  category: string; // slug of the category
-  brand: string;
-  stock: number;
-  specifications?: { key: string; value: string }[];
-  isSpecialOffer?: boolean;
-  isFeatured?: boolean;
-  series?: string;
-  seriesName?: string;
-  totalSold?: number;
-  createdAt?: number;
-  updatedAt?: number;
-}
-
-// ===== Customer =====
-export interface Customer {
-  id?: string; // Firebase Auth UID
-  email: string;
-  name?: string;
-  photoURL?: string;
-  phone?: string;
-  provider?: "password" | "google";
-  createdAt?: number;
-  updatedAt?: number;
-}
-// ===== Category =====
+// ===== Category (N-level tree) =====
 export interface Category {
   id?: string;
   name: string;
   slug: string;
-  createdAt?: number;
+  parentSlug?: string | null;
 }
 
-// ===== Spec Template (used in categories) =====
 export interface SpecTemplate {
   key: string;
   placeholder?: string;
   required?: boolean;
 }
 
-// ===== Category Spec (stored in Firestore) =====
 export interface CategorySpec {
-  id?: string;
   categorySlug: string;
   categoryName: string;
   specs: SpecTemplate[];
-  updatedAt?: number;
 }
 
-// ===== Brand =====
 export interface Brand {
   id?: string;
   name: string;
-  slug: string;
+  slug?: string;
   logo?: string;
-  createdAt?: number;
 }
 
-// ===== Banner =====
+export interface Series {
+  id?: string;
+  name: string;
+  slug: string;
+}
+
+// ===== Product Variants =====
+export interface ProductOptionValue {
+  id: string;
+  label: string;
+  colorHex?: string;
+  images?: string[];
+}
+
+export interface ProductOption {
+  id: string;
+  name: string;
+  type: "text" | "color";
+  values: ProductOptionValue[];
+}
+
+export interface ProductVariant {
+  id: string;
+  optionValueIds: string[];
+  sku?: string;
+  price: number;
+  discountPrice?: number;
+  stock: number;
+  images?: string[];
+  enabled: boolean;
+}
+
+export interface SpecValue {
+  key: string;
+  value: string;
+  placeholder?: string;
+  required?: boolean;
+}
+
+export interface Product {
+  id?: string;
+  name: string;
+  description?: string;
+  price: number;
+  discountPrice?: number;
+  category: string;
+  categoryPath?: string[];
+  categoryName?: string;
+  brand: string;
+  stock: number;
+  images: string[];
+  specifications: SpecValue[];
+  isSpecialOffer?: boolean;
+  isFeatured?: boolean;
+  totalSold?: number;
+  series?: string;
+  seriesName?: string;
+  options?: ProductOption[];
+  variants?: ProductVariant[];
+  createdAt?: any;
+  updatedAt?: any;
+}
+
 export interface Banner {
   id?: string;
-  title: string;
-  subtitle?: string;
   imageUrl: string;
   link?: string;
   position: "hero" | "mid" | "bottom";
   active: boolean;
-  order?: number;
-  createdAt?: number;
+  title?: string;
+  subtitle?: string;
 }
 
-// ===== Special Offer =====
 export interface SpecialOffer {
   id?: string;
   title: string;
@@ -85,10 +106,9 @@ export interface SpecialOffer {
   link?: string;
   discount?: string;
   active: boolean;
-  createdAt?: number;
 }
 
-// ===== Order =====
+// ===== Orders =====
 export type OrderStatus =
   | "pending"
   | "confirmed"
@@ -98,9 +118,12 @@ export type OrderStatus =
   | "returned";
 
 export type PaymentMethod = "cod" | "card" | "bkash" | "nagad";
+export type PaymentStatus = "paid" | "unpaid";
 
 export interface OrderItem {
   productId: string;
+  variantId?: string;
+  variantLabel?: string;
   name: string;
   price: number;
   quantity: number;
@@ -114,7 +137,7 @@ export interface Order {
   total: number;
   status: OrderStatus;
   paymentMethod: PaymentMethod;
-  paymentStatus: "paid" | "unpaid";
+  paymentStatus: PaymentStatus;
   shipping: {
     name: string;
     phone: string;
@@ -124,6 +147,25 @@ export interface Order {
   };
   returnRequested?: boolean;
   returnReason?: string;
-  createdAt?: number;
-  updatedAt?: number;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+// ===== Admin RBAC =====
+export type AdminSection =
+  | "dashboard"
+  | "products"
+  | "categories"
+  | "brands"
+  | "banners"
+  | "offers"
+  | "orders"
+  | "users";
+
+export interface AdminUser {
+  uid: string;
+  email: string;
+  role: "admin" | "super";
+  permissions: AdminSection[] | ["*"];
+  addedAt?: number;
 }

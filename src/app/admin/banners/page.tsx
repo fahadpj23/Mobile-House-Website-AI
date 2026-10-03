@@ -54,13 +54,10 @@ export default function AdminBanners() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState({
-    title: "",
-    subtitle: "",
     imageUrl: "",
     link: "",
     position: "hero" as Banner["position"],
     active: true,
-    order: 0,
   });
 
   const load = async () => {
@@ -104,8 +101,8 @@ export default function AdminBanners() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.title.trim() || !form.imageUrl) {
-      toast.error("Title and image required");
+    if (!form.imageUrl) {
+      toast.error("Image required");
       return;
     }
     setSaving(true);
@@ -128,13 +125,10 @@ export default function AdminBanners() {
 
   const resetForm = () => {
     setForm({
-      title: "",
-      subtitle: "",
       imageUrl: "",
       link: "",
       position: "hero",
       active: true,
-      order: 0,
     });
     setEditing(null);
   };
@@ -142,13 +136,10 @@ export default function AdminBanners() {
   const handleEdit = (b: Banner) => {
     setEditing(b.id!);
     setForm({
-      title: b.title,
-      subtitle: b.subtitle || "",
       imageUrl: b.imageUrl,
       link: b.link || "",
       position: b.position,
       active: b.active,
-      order: b.order || 0,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -175,18 +166,6 @@ export default function AdminBanners() {
       <form onSubmit={handleSubmit} className="card p-5 mb-6 space-y-3">
         <div className="grid md:grid-cols-2 gap-3">
           <input
-            placeholder="Title *"
-            className="input"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-          />
-          <input
-            placeholder="Subtitle"
-            className="input"
-            value={form.subtitle}
-            onChange={(e) => setForm({ ...form, subtitle: e.target.value })}
-          />
-          <input
             placeholder="Link (e.g. /products?category=phone)"
             className="input"
             value={form.link}
@@ -208,15 +187,6 @@ export default function AdminBanners() {
               </option>
             ))}
           </select>
-          <input
-            type="number"
-            placeholder="Order (0 = first)"
-            className="input"
-            value={form.order}
-            onChange={(e) =>
-              setForm({ ...form, order: Number(e.target.value) })
-            }
-          />
           <label className="flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer">
             <input
               type="checkbox"
@@ -311,8 +281,6 @@ export default function AdminBanners() {
                 className="w-32 h-20 rounded object-cover"
               />
               <div className="flex-1">
-                <p className="font-medium">{b.title}</p>
-                <p className="text-xs text-gray-500">{b.subtitle}</p>
                 <div className="flex gap-2 mt-1">
                   <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
                     {b.position}
@@ -325,9 +293,6 @@ export default function AdminBanners() {
                     }`}
                   >
                     {b.active ? "Active" : "Inactive"}
-                  </span>
-                  <span className="text-xs text-gray-400">
-                    Order: {b.order}
                   </span>
                 </div>
               </div>

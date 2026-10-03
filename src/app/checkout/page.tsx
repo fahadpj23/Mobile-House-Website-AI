@@ -36,13 +36,40 @@ export default function CheckoutPage() {
     try {
       await createOrder({
         userId: user.uid,
-        items: items.map((i) => ({
-          productId: i.product.id!,
-          name: i.product.name,
-          price: i.product.discountPrice || i.product.price,
-          quantity: i.quantity,
-          image: i.product.images[0] || "",
-        })),
+        items: items.map((i) => {
+          const v = i.product.variants?.find((x) => x.id === i.variantId);
+          const unitPrice = v
+            ? v.discountPrice || v.price
+            : i.product.discountPrice || i.product.price;
+
+          // Pick color image as thumbnail if available
+          let image = i.product.images[0] || "";
+          if (v && i.product.options) {
+            const colorOpt = i.product.options.find((o) => o.type === "color");
+            if (colorOpt) {
+              const colorIdx = i.product.options.findIndex(
+                (o) => o.id === colorOpt.id,
+              );
+              const colorValId = v.optionValueIds[colorIdx];
+              const colorImg = colorOpt.values.find(
+                (cv) => cv.id === colorValId,
+              )?.images?.[0];
+              if (colorImg) image = colorImg;
+            }
+          }
+
+          return {
+            productId: i.product.id!,
+            variantId: i.variantId,
+            variantLabel: i.variantLabel,
+            name: i.variantLabel
+              ? `${i.product.name} (${i.variantLabel})`
+              : i.product.name,
+            price: unitPrice,
+            quantity: i.quantity,
+            image,
+          };
+        }),
         total,
         status: "pending",
         paymentMethod: payment,
@@ -134,19 +161,67 @@ export default function CheckoutPage() {
 
         <div className="card p-5 h-fit">
           <h2 className="font-bold text-lg mb-4">Your Order</h2>
-          <div className="space-y-2 max-h-60 overflow-auto mb-4">
-            {items.map((i) => (
-              <div key={i.product.id} className="flex justify-between text-sm">
-                <span className="line-clamp-1">
-                  {i.product.name} × {i.quantity}
-                </span>
-                <span className="font-medium">
-                  ৳{(i.product.discountPrice || i.product.price) * i.quantity}
-                </span>
-              </div>
-            ))}
+          <div className="space-y-3 max-h-80 overflow-auto mb-4">
+            {items.map((i) => {
+              const key = `${i.product.id}__${i.variantId || "base"}`;
+              const v = i.product.variants?.find((x) => x.id === i.variantId);
+              const unit = v
+                ? v.discountPrice || v.price
+                : i.product.discountPrice || i.product.price;
+
+              let image = i.product.images[0] || "";
+              if (v && i.product.options) {
+                const colorOpt = i.product.options.find(
+                  (o) => o.type === "color",
+                );
+                if (colorOpt) {
+                  const colorIdx = i.product.options.findIndex(
+                    (o) => o.id === colorOpt.id,
+                  );
+                  const colorValId = v.optionValueIds[colorIdx];
+                  const colorImg = colorOpt.values.find(
+                    (cv) => cv.id === colorValId,
+                  )?.images?.[0];
+                  if (colorImg) image = colorImg;
+                }
+              }
+
+              return (
+                <div key={key} className="flex gap-3 text-sm">
+                  {image && (
+                    <img
+                      src={image}
+                      alt=""
+                      className="w-12 h-12 rounded object-cover border shrink-0"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="line-clamp-2">{i.product.name}</p>
+                    {i.variantLabel && (
+                      <p className="text-[11px] text-gray-500">
+                        {i.variantLabel}
+                      </p>
+                    )}
+                    <p className="text-[11px] text-gray-500">
+                      ৳{unit} × {i.quantity}
+                    </p>
+                  </div>
+                  <span className="font-medium whitespace-nowrap">
+                    ৳{unit * i.quantity}
+                  </span>
+                </div>
+              );
+            })}
           </div>
           <hr className="my-3" />
+          <div className="flex justify-between text-sm mb-1">
+            <span>Subtotal</span>
+            <span>৳{total}</span>
+          </div>
+          <div className="flex justify-between text-sm mb-3">
+            <span>Shipping</span>
+            <span>Free</span>
+          </div>
           <div className="flex justify-between font-bold text-lg mb-4">
             <span>Total</span>
             <span className="text-blue-600">৳{total}</span>

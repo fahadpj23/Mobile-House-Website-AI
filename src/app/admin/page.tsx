@@ -1,10 +1,19 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { getProducts, getOrders, getCategories } from "@/lib/firestore";
-import { Package, ShoppingBag, FolderTree, DollarSign } from "lucide-react";
-import { makeAdmin } from "@/lib/adminAuth";
+import {
+  Package,
+  ShoppingBag,
+  FolderTree,
+  DollarSign,
+  Users,
+} from "lucide-react";
+import { useAdminAuth } from "@/components/AdminAuthProvider";
 
 export default function AdminDashboard() {
+  const { isSuper, admin } = useAdminAuth();
+
   const [stats, setStats] = useState({
     products: 0,
     orders: 0,
@@ -58,8 +67,17 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        {admin?.email && (
+          <p className="text-sm text-gray-500 mt-1">
+            Signed in as <b>{admin.email}</b>
+            {isSuper ? " (super admin)" : " (limited access)"}
+          </p>
+        )}
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {cards.map((c) => {
           const Icon = c.icon;
@@ -75,20 +93,26 @@ export default function AdminDashboard() {
             </div>
           );
         })}
-        <button
-          onClick={async () => {
-            const uid = prompt("Enter user UID to promote:");
-            const email = prompt("Enter user email:");
-            if (uid && email) {
-              await makeAdmin(uid, email);
-              alert("User promoted to admin");
-            }
-          }}
-          className="btn-outline mt-4"
-        >
-          + Promote User to Admin
-        </button>
       </div>
+
+      {isSuper && (
+        <div className="card p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <Users size={18} className="text-blue-600" />
+            <h2 className="font-bold">Manage admin users</h2>
+          </div>
+          <p className="text-sm text-gray-500 mb-3">
+            Create new admin accounts and control which sections they can
+            access.
+          </p>
+          <Link
+            href="/admin/users"
+            className="btn-primary inline-flex items-center gap-2"
+          >
+            <Users size={16} /> Manage Admin Users
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

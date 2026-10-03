@@ -1,13 +1,12 @@
 "use client";
 import { useState, useEffect, Suspense } from "react";
-import { useAuth } from "@/components/AuthProvider";
-import { isAdminUser } from "@/lib/adminAuth";
+import { useAdminAuth } from "@/components/AdminAuthProvider";
 import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import { ShieldCheck, Lock } from "lucide-react";
 
 function AdminLoginForm() {
-  const { login, user, loading } = useAuth();
+  const { user, admin, loading } = useAdminAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") || "/admin";
@@ -17,18 +16,16 @@ function AdminLoginForm() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // If already logged in as admin, skip login
   useEffect(() => {
-    if (loading || !user) return;
-    (async () => {
-      const ok = await isAdminUser(user);
-      if (ok) router.replace(redirect);
-    })();
-  }, [user, loading, router, redirect]);
+    if (loading || !user || !admin) return;
+    router.replace(redirect);
+  }, [user, admin, loading, router, redirect]);
 
   useEffect(() => {
     if (errorParam === "not_admin") {
       toast.error("This account is not an admin.");
+    } else if (errorParam === "no_access") {
+      toast.error("You don't have access to that section.");
     }
   }, [errorParam]);
 
@@ -36,23 +33,33 @@ function AdminLoginForm() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await login(email.trim(), password);
+      const { adminAuth } = await import("@/lib/firebase");
+      const { signInWithEmailAndPassword } = await import("firebase/auth");
 
-      // Wait a tick for onAuthStateChanged → user becomes available
-      setTimeout(async () => {
-        const { auth } = await import("@/lib/firebase");
-        const current = auth.currentUser;
-        const ok = await isAdminUser(current);
-        if (!ok) {
-          toast.error("Not an admin account");
-          setSubmitting(false);
-          return;
-        }
-        toast.success("Welcome, admin!");
-        router.replace(redirect);
-      }, 500);
+      const cred = await signInWithEmailAndPassword(
+        adminAuth,
+        email.trim(),
+        password,
+      );
+
+      // Wait briefly for AdminAuthProvider to load the admin doc
+      const { getAdminDoc } = await import("@/lib/adminAuth");
+      const adminDoc = await getAdminDoc(cred.user);
+
+      if (!adminDoc) {
+        await adminAuth.signOut();
+        toast.error(
+          "This account is not an admin. Ask a super admin to add you.",
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      toast.success(`Welcome, ${adminDoc.email}`);
+      router.replace(redirect);
     } catch (err: any) {
-      toast.error(err.message || "Login failed");
+      console.error("[admin login]", err);
+      toast.error(err?.message || "Login failed");
       setSubmitting(false);
     }
   };

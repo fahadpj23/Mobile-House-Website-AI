@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { CartProvider } from "@/components/CartProvider";
 import { AuthProvider } from "@/components/AuthProvider";
-import Navbar from "@/components/Navbar";
+import CustomerNavbar from "@/components/CustomerNavbar";
 import Footer from "@/components/Footer";
 import { Toaster } from "react-hot-toast";
 
@@ -21,7 +21,7 @@ export default function RootLayout({
       <body>
         <AuthProvider>
           <CartProvider>
-            <Navbar />
+            <CustomerNavbar />
             <main className="min-h-[70vh]">{children}</main>
             <Footer />
             <Toaster position="top-right" />

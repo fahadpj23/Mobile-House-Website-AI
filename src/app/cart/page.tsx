@@ -23,45 +23,67 @@ export default function CartPage() {
       <div className="grid md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-3">
           {items.map((item) => {
-            const price = item.product.discountPrice || item.product.price;
+            const key = `${item.product.id}__${item.variantId || "base"}`;
+            const v = item.product.variants?.find(
+              (x) => x.id === item.variantId,
+            );
+            const unitPrice = v
+              ? v.discountPrice || v.price
+              : item.product.discountPrice || item.product.price;
+
+            // Thumbnail: use first color image if the variant has a color
+            let thumb = item.product.images[0] || "/placeholder.png";
+            if (v && item.product.options) {
+              const colorOpt = item.product.options.find(
+                (o) => o.type === "color",
+              );
+              if (colorOpt) {
+                const idx = item.product.options.findIndex(
+                  (o) => o.id === colorOpt.id,
+                );
+                const valId = v.optionValueIds[idx];
+                const img = colorOpt.values.find((cv) => cv.id === valId)
+                  ?.images?.[0];
+                if (img) thumb = img;
+              }
+            }
+
             return (
-              <div
-                key={item.product.id}
-                className="card p-4 flex gap-4 items-center"
-              >
+              <div key={key} className="card p-4 flex gap-4 items-center">
                 <img
-                  src={item.product.images[0]}
+                  src={thumb}
                   alt=""
-                  className="w-20 h-20 object-cover rounded"
+                  className="w-20 h-20 object-cover rounded shrink-0 border"
                 />
-                <div className="flex-1">
-                  <h3 className="font-semibold">{item.product.name}</h3>
-                  <p className="text-blue-600 font-bold">৳{price}</p>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold line-clamp-2">
+                    {item.product.name}
+                  </h3>
+                  {item.variantLabel && (
+                    <p className="text-xs text-gray-500">{item.variantLabel}</p>
+                  )}
+                  <p className="text-blue-600 font-bold mt-1">৳{unitPrice}</p>
                 </div>
                 <div className="flex items-center border rounded-lg">
                   <button
-                    onClick={() =>
-                      updateQty(item.product.id!, item.quantity - 1)
-                    }
+                    onClick={() => updateQty(key, item.quantity - 1)}
                     className="px-3 py-1"
                   >
                     −
                   </button>
                   <span className="px-3">{item.quantity}</span>
                   <button
-                    onClick={() =>
-                      updateQty(item.product.id!, item.quantity + 1)
-                    }
+                    onClick={() => updateQty(key, item.quantity + 1)}
                     className="px-3 py-1"
                   >
                     +
                   </button>
                 </div>
                 <p className="font-bold w-20 text-right">
-                  ৳{price * item.quantity}
+                  ৳{unitPrice * item.quantity}
                 </p>
                 <button
-                  onClick={() => removeItem(item.product.id!)}
+                  onClick={() => removeItem(key)}
                   className="text-red-500 hover:text-red-700"
                 >
                   <Trash2 size={18} />
