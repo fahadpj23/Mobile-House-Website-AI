@@ -269,7 +269,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
           <div>
             <p className="text-[11px] text-gray-500 mb-0.5">Price</p>
             <span className="text-2xl md:text-3xl font-bold text-blue-600 leading-none">
-              ৳{price}
+              ₹{price}
             </span>
           </div>
 
@@ -278,7 +278,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
               <div>
                 <p className="text-[11px] text-gray-500 mb-0.5">MRP</p>
                 <span className="text-sm line-through text-gray-400 leading-none">
-                  ৳{originalPrice}
+                  ₹{originalPrice}
                 </span>
               </div>
 
@@ -296,7 +296,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
 
         {hasMrp && (
           <p className="text-sm text-green-700 font-medium mb-4">
-            You save ৳{originalPrice! - price}
+            You save ₹{originalPrice! - price}
           </p>
         )}
 

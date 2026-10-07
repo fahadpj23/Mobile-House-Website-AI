@@ -496,10 +496,10 @@ export default function VariantEditor({
                         </th>
                       ))}
                       <th className="text-left px-3 py-2 font-medium whitespace-nowrap">
-                        MRP (৳)
+                        MRP (₹)
                       </th>
                       <th className="text-left px-3 py-2 font-medium whitespace-nowrap">
-                        Price (৳)
+                        Price (₹)
                       </th>
                       <th className="text-left px-3 py-2 font-medium whitespace-nowrap">
                         Stock

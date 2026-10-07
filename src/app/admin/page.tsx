@@ -60,7 +60,7 @@ export default function AdminDashboard() {
     },
     {
       label: "Revenue",
-      value: `৳${stats.revenue}`,
+      value: `₹${stats.revenue}`,
       icon: DollarSign,
       color: "bg-orange-500",
     },

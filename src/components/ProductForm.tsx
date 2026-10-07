@@ -103,6 +103,8 @@ export default function ProductForm({ initialData }: Props) {
   const [variants, setVariants] = useState<ProductVariant[]>(
     initialData?.variants || [],
   );
+
+  // ★ hasVariants — true only when BOTH options and variants exist
   const hasVariants = options.length > 0 && variants.length > 0;
 
   const hasVariantImages = useMemo(
@@ -220,8 +222,9 @@ export default function ProductForm({ initialData }: Props) {
       }
       setForm((f) => ({ ...f, images: [...f.images, ...uploaded] }));
       toast.success(`${uploaded.length} image(s) uploaded`);
-    } catch {
-      toast.error("Upload failed");
+    } catch (err: any) {
+      console.error("Image upload failed:", err);
+      toast.error(`Upload failed: ${err?.message || "Unknown error"}`);
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -251,9 +254,20 @@ export default function ProductForm({ initialData }: Props) {
       specifications: f.specifications.filter((_, idx) => idx !== i),
     }));
 
+  // ═══════════════════════════════════════════════════════
+  // HANDLE SUBMIT — rewritten for reliability
+  //
+  // Key fixes:
+  //  1. Compute hasVariants locally (fresh state, not stale closure)
+  //  2. Only send `options`/`variants` when actually present
+  //  3. Only send optional fields when they have a value
+  //     (avoids `undefined` leaking into Firestore)
+  //  4. Surface the real error from addProduct/updateProduct
+  // ═══════════════════════════════════════════════════════
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // ---------- Basic validation ----------
     if (!form.name.trim()) return toast.error("Name is required");
     if (!path.length) return toast.error("Category is required");
     if (!form.brand) return toast.error("Brand is required");
@@ -263,27 +277,38 @@ export default function ProductForm({ initialData }: Props) {
     const stockNum = toNum(form.stock);
     const totalSoldNum = toNum(form.totalSold);
 
-    if (form.images.length === 0 && !hasVariantImages) {
+    // ---------- Decide mode from FRESH state ----------
+    const enabledVariants = variants.filter((v) => v.enabled);
+    const hasVariantsLocal = options.length > 0 && variants.length > 0;
+
+    // ---------- Image validation ----------
+    const hasAnyVariantImages = options.some(
+      (o) =>
+        o.type === "color" && o.values.some((v) => (v.images?.length || 0) > 0),
+    );
+
+    if (form.images.length === 0 && !hasAnyVariantImages) {
       return toast.error("Add at least one image, or upload color images");
     }
 
+    // ---------- Spec validation ----------
     const missing = form.specifications.find(
       (s) => s.required && s.key.trim() && !s.value.trim(),
     );
     if (missing) return toast.error(`"${missing.key}" is required`);
 
-    // ★ Validate only the fields relevant to the current mode
-    const enabledVariants = variants.filter((v) => v.enabled);
-
-    if (hasVariants) {
+    // ---------- Price / stock validation ----------
+    if (hasVariantsLocal) {
       if (enabledVariants.length === 0) {
         return toast.error("Enable at least one variant");
       }
       const badPrice = enabledVariants.find((v) => v.price <= 0);
       if (badPrice) return toast.error("Every variant needs a price > 0");
-      // Base price/stock are ignored when variants exist.
     } else {
-      if (priceNum <= 0) return toast.error("Price must be greater than 0");
+      // Non-variant mode — base price must be valid
+      if (priceNum <= 0) {
+        return toast.error("Price must be greater than 0");
+      }
     }
 
     const cleanedSpecs = form.specifications.filter(
@@ -292,25 +317,25 @@ export default function ProductForm({ initialData }: Props) {
 
     setSaving(true);
     try {
-      // ★ Derive top-level price / MRP / stock from variants when present
-      const finalPrice = hasVariants
+      // ---------- Derive final values ----------
+      const finalPrice = hasVariantsLocal
         ? Math.min(...enabledVariants.map((v) => v.price))
         : priceNum;
 
-      const finalMrp = hasVariants
+      const finalMrp = hasVariantsLocal
         ? Math.max(...enabledVariants.map((v) => v.discountPrice ?? 0), 0) ||
           undefined
         : mrpNum || undefined;
 
-      const finalStock = hasVariants
+      const finalStock = hasVariantsLocal
         ? enabledVariants.reduce((s, v) => s + v.stock, 0)
         : stockNum;
 
-      const payload = {
+      // ---------- Build payload (skip undefined carefully) ----------
+      const payload: Record<string, any> = {
         name: form.name.trim(),
         description: form.description.trim(),
         price: finalPrice,
-        discountPrice: finalMrp,
         category: leafSlug,
         categoryPath: path,
         categoryName: slugToCat[leafSlug]?.name || "",
@@ -321,11 +346,22 @@ export default function ProductForm({ initialData }: Props) {
         isSpecialOffer: form.isSpecialOffer,
         isFeatured: form.isFeatured,
         totalSold: totalSoldNum,
-        series: form.series || undefined,
-        seriesName: form.seriesName || undefined,
-        options: hasVariants ? options : undefined,
-        variants: hasVariants ? variants : undefined,
       };
+
+      // Optional fields — only include when they have a value
+      if (finalMrp !== undefined) payload.discountPrice = finalMrp;
+      if (form.series) payload.series = form.series;
+      if (form.seriesName) payload.seriesName = form.seriesName;
+
+      // Variant-only fields — only include when hasVariants is true
+      if (hasVariantsLocal) {
+        payload.options = options;
+        payload.variants = variants;
+      }
+      // NOTE: When hasVariantsLocal === false we intentionally DO NOT
+      // send options/variants — keeps Firestore document clean.
+
+      console.log("📦 Product payload:", payload);
 
       if (isEdit && initialData?.id) {
         await updateProduct(initialData.id, payload);
@@ -335,9 +371,14 @@ export default function ProductForm({ initialData }: Props) {
         toast.success("Product added");
       }
       router.push("/admin/products");
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to save product");
+    } catch (err: any) {
+      console.error("❌ Save product failed:", err);
+      // Surface the real error message so you can see WHY it fails
+      const msg =
+        err?.message ||
+        err?.code ||
+        (typeof err === "string" ? err : "Unknown error");
+      toast.error(`Failed to save product: ${msg}`);
     } finally {
       setSaving(false);
     }
@@ -575,7 +616,7 @@ export default function ProductForm({ initialData }: Props) {
             <h2 className="font-bold text-lg">Pricing & Stock</h2>
 
             {hasVariants ? (
-              // ★ Variants take over pricing & stock — no manual input needed
+              // Variants take over pricing & stock — no manual input needed
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
                 <p className="font-medium mb-1">
                   Pricing & stock are managed by variants
@@ -586,7 +627,7 @@ export default function ProductForm({ initialData }: Props) {
                 </p>
                 <ul className="text-xs text-blue-700 mt-2 space-y-0.5">
                   <li>
-                    <b>Price:</b> ৳
+                    <b>Price:</b> ₹
                     {(() => {
                       const enabled = variants.filter((v) => v.enabled);
                       if (!enabled.length) return "—";
@@ -613,7 +654,7 @@ export default function ProductForm({ initialData }: Props) {
               <>
                 <div className="grid md:grid-cols-3 gap-3">
                   <div>
-                    <label className="text-sm text-gray-600">MRP (৳)</label>
+                    <label className="text-sm text-gray-600">MRP (₹)</label>
                     <input
                       type="number"
                       min={0}
@@ -629,7 +670,7 @@ export default function ProductForm({ initialData }: Props) {
                     </p>
                   </div>
                   <div>
-                    <label className="text-sm text-gray-600">Price (৳) *</label>
+                    <label className="text-sm text-gray-600">Price (₹) *</label>
                     <input
                       type="number"
                       min={0}

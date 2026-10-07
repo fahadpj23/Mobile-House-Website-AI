@@ -164,11 +164,11 @@ export default function AdminProducts() {
                       </td>
                       <td className="p-3">
                         <p className="font-medium">
-                          ৳{p.discountPrice || p.price}
+                          ₹{p.discountPrice || p.price}
                         </p>
                         {p.discountPrice && p.discountPrice < p.price && (
                           <p className="text-[11px] text-gray-400 line-through">
-                            ৳{p.price}
+                            ₹{p.price}
                           </p>
                         )}
                       </td>

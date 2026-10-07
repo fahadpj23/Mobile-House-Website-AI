@@ -1,4 +1,4 @@
-import { getProducts, getCategories, getSeries } from "@/lib/firestore";
+import { getProducts, getCategories } from "@/lib/firestore";
 import ProductCard from "@/components/ProductCard";
 import Link from "next/link";
 
@@ -8,7 +8,6 @@ interface Props {
   searchParams: {
     q?: string;
     category?: string;
-    series?: string;
     [key: string]: string | string[] | undefined;
   };
 }
@@ -56,11 +55,57 @@ function toggleValue(list: string[], value: string): string[] {
 }
 
 export default async function ProductsPage({ searchParams }: Props) {
-  const [all, categories, seriesList] = await Promise.all([
-    getProducts(),
-    getCategories(),
-    getSeries(),
-  ]);
+  const [all, categories] = await Promise.all([getProducts(), getCategories()]);
+
+  // ─────────────────────────────────────────────────────
+  // Build category lookup helpers
+  // ─────────────────────────────────────────────────────
+  const catBySlug: Record<string, (typeof categories)[number]> = {};
+  categories.forEach((c) => (catBySlug[c.slug] = c));
+
+  // childrenOf: parentSlug → Category[]
+  const childrenOf: Record<string, typeof categories> = {};
+  categories.forEach((c) => {
+    const key = c.parentSlug || "__root__";
+    (childrenOf[key] ||= []).push(c);
+  });
+
+  // Walk up to find root ancestor slug of any category
+  const rootOf = (slug: string): string => {
+    let cur = catBySlug[slug];
+    const guard = new Set<string>();
+    while (cur?.parentSlug && catBySlug[cur.parentSlug] && !guard.has(slug)) {
+      guard.add(cur.slug);
+      cur = catBySlug[cur.parentSlug];
+    }
+    return cur?.slug || slug;
+  };
+
+  // Collect all descendant slugs of a category (including itself)
+  const descendantsOf = (slug: string): Set<string> => {
+    const result = new Set<string>();
+    const stack = [slug];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      if (result.has(cur)) continue;
+      result.add(cur);
+      (childrenOf[cur] || []).forEach((c) => stack.push(c.slug));
+    }
+    return result;
+  };
+
+  // Build the ordered breadcrumb path (root → leaf) for a category
+  const breadcrumbOf = (slug: string): (typeof categories)[number][] => {
+    const chain: (typeof categories)[number][] = [];
+    let cur = catBySlug[slug];
+    const guard = new Set<string>();
+    while (cur && !guard.has(cur.slug)) {
+      guard.add(cur.slug);
+      chain.unshift(cur);
+      cur = cur.parentSlug ? catBySlug[cur.parentSlug] : undefined!;
+    }
+    return chain;
+  };
 
   let products = all;
 
@@ -70,23 +115,29 @@ export default async function ProductsPage({ searchParams }: Props) {
     products = products.filter((p) => {
       const name = (p.name || "").toLowerCase();
       const brand = (p.brand || "").toLowerCase();
-      const seriesName = (p.seriesName || "").toLowerCase();
-      const seriesSlug = (p.series || "").toLowerCase();
-      return (
-        name.includes(q) ||
-        brand.includes(q) ||
-        seriesName.includes(q) ||
-        seriesSlug.includes(q)
-      );
+      return name.includes(q) || brand.includes(q);
     });
   }
 
+  // ─────────────────────────────────────────────────────
+  // CATEGORY FILTER — now matches descendants too
+  //
+  // A product belongs to the selected category if:
+  //   • product.category === selectedSlug        (exact leaf match), OR
+  //   • product.categoryPath includes selectedSlug (ancestor match)
+  // ─────────────────────────────────────────────────────
   if (searchParams.category) {
-    products = products.filter((p) => p.category === searchParams.category);
-  }
+    const selected = searchParams.category;
+    const scope = descendantsOf(selected); // includes selected itself
 
-  if (searchParams.series) {
-    products = products.filter((p) => p.series === searchParams.series);
+    products = products.filter((p) => {
+      // Exact leaf match
+      if (p.category && scope.has(p.category)) return true;
+      // Any node in the product's categoryPath matches
+      if (p.categoryPath && p.categoryPath.some((s) => scope.has(s)))
+        return true;
+      return false;
+    });
   }
 
   // ===== Build available spec facets =====
@@ -115,7 +166,6 @@ export default async function ProductsPage({ searchParams }: Props) {
     );
   }
 
-  const activeSeries = seriesList.find((s) => s.slug === searchParams.series);
   const activeCategory = categories.find(
     (c) => c.slug === searchParams.category,
   );
@@ -123,8 +173,43 @@ export default async function ProductsPage({ searchParams }: Props) {
   const activeFilterCount =
     Object.values(appliedSpecs).reduce((n, v) => n + v.length, 0) +
     (searchParams.category ? 1 : 0) +
-    (searchParams.series ? 1 : 0) +
     (searchParams.q ? 1 : 0);
+
+  // ─────────────────────────────────────────────────────
+  // Category chips — show contextually relevant categories:
+  //   • No category selected → show root categories only
+  //   • Category selected    → show siblings + children of
+  //                            the selected category
+  // ─────────────────────────────────────────────────────
+  const chipCategories = (() => {
+    if (!searchParams.category) {
+      // No category filter → show roots
+      return (childrenOf["__root__"] || []).sort((a, b) =>
+        a.name.localeCompare(b.name),
+      );
+    }
+    const sel = searchParams.category;
+    const selCat = catBySlug[sel];
+    if (!selCat) return [];
+
+    // Show children of selected category (if any),
+    // otherwise show siblings (siblings usually means they
+    // are at the same depth and are alternatives).
+    const children = (childrenOf[sel] || []).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    if (children.length > 0) return children;
+
+    const siblings = (childrenOf[selCat.parentSlug || "__root__"] || []).sort(
+      (a, b) => a.name.localeCompare(b.name),
+    );
+    return siblings;
+  })();
+
+  // Breadcrumb for the active category
+  const activeBreadcrumb = searchParams.category
+    ? breadcrumbOf(searchParams.category)
+    : [];
 
   /* ---------- Reusable spec filter panel ---------- */
   const SpecFilters = (
@@ -195,14 +280,39 @@ export default async function ProductsPage({ searchParams }: Props) {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
+      {/* ===== BREADCRUMB ===== */}
+      {activeBreadcrumb.length > 0 && (
+        <nav className="text-xs text-gray-500 mb-2 flex flex-wrap items-center gap-1">
+          <Link href="/products" className="hover:text-blue-600">
+            All Products
+          </Link>
+          {activeBreadcrumb.map((c, i) => {
+            const isLast = i === activeBreadcrumb.length - 1;
+            return (
+              <span key={c.slug} className="flex items-center gap-1">
+                <span className="text-gray-300">›</span>
+                {isLast ? (
+                  <span className="text-gray-800 font-medium">{c.name}</span>
+                ) : (
+                  <Link
+                    href={buildHref(searchParams, { category: c.slug })}
+                    className="hover:text-blue-600"
+                  >
+                    {c.name}
+                  </Link>
+                )}
+              </span>
+            );
+          })}
+        </nav>
+      )}
+
       <h1 className="text-lg md:text-xl font-bold mb-1">
         {searchParams.q
           ? `Search results for "${searchParams.q}"`
-          : activeSeries
-            ? activeSeries.name
-            : activeCategory
-              ? activeCategory.name
-              : "All Products"}
+          : activeCategory
+            ? activeCategory.name
+            : "All Products"}
       </h1>
       <p className="text-xs text-gray-500 mb-3">
         {products.length} product{products.length !== 1 ? "s" : ""} found
@@ -217,7 +327,7 @@ export default async function ProductsPage({ searchParams }: Props) {
       </p>
 
       {/* ===== CATEGORY CHIPS ===== */}
-      <div className="flex flex-wrap gap-1.5 mb-2">
+      <div className="flex flex-wrap gap-1.5 mb-4">
         <Link
           href={buildHref(searchParams, { category: undefined })}
           className={`text-xs px-3 py-1 rounded-full border transition ${
@@ -228,11 +338,24 @@ export default async function ProductsPage({ searchParams }: Props) {
         >
           All
         </Link>
-        {categories.map((c) => {
+
+        {/* If a category is selected, offer its parent as a "up" link */}
+        {activeCategory?.parentSlug && (
+          <Link
+            href={buildHref(searchParams, {
+              category: activeCategory.parentSlug,
+            })}
+            className="text-xs px-3 py-1 rounded-full border bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100 transition"
+          >
+            ← {catBySlug[activeCategory.parentSlug]?.name || "Back"}
+          </Link>
+        )}
+
+        {chipCategories.map((c) => {
           const active = searchParams.category === c.slug;
           return (
             <Link
-              key={c.id}
+              key={c.id ?? c.slug}
               href={buildHref(searchParams, {
                 category: active ? undefined : c.slug,
               })}
@@ -247,33 +370,6 @@ export default async function ProductsPage({ searchParams }: Props) {
           );
         })}
       </div>
-
-      {/* ===== SERIES CHIPS ===== */}
-      {seriesList.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-4">
-          <span className="text-[11px] text-gray-500 self-center mr-1">
-            Series:
-          </span>
-          {seriesList.map((s) => {
-            const active = searchParams.series === s.slug;
-            return (
-              <Link
-                key={s.id}
-                href={buildHref(searchParams, {
-                  series: active ? undefined : s.slug,
-                })}
-                className={`text-[11px] px-2.5 py-0.5 rounded-full border transition ${
-                  active
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white border-gray-300 hover:border-blue-500 hover:text-blue-600"
-                }`}
-              >
-                {s.name}
-              </Link>
-            );
-          })}
-        </div>
-      )}
 
       <div className="grid md:grid-cols-[220px_1fr] gap-4">
         {/* ===== SPEC FILTER SIDEBAR (desktop) ===== */}
@@ -312,9 +408,19 @@ export default async function ProductsPage({ searchParams }: Props) {
           )}
 
           {products.length === 0 ? (
-            <p className="text-gray-500 text-sm">
-              No products match these filters.
-            </p>
+            <div className="text-center py-10">
+              <p className="text-gray-500 text-sm mb-3">
+                No products match these filters.
+              </p>
+              {activeFilterCount > 0 && (
+                <Link
+                  href="/products"
+                  className="inline-block text-xs px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  Clear all filters
+                </Link>
+              )}
+            </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
               {products.map((p) => (

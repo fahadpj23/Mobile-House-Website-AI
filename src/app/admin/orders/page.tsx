@@ -71,7 +71,7 @@ export default function AdminOrders() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xl font-bold text-blue-600">৳{o.total}</p>
+                  <p className="text-xl font-bold text-blue-600">₹{o.total}</p>
                   <p className="text-xs">
                     {o.paymentMethod.toUpperCase()} -{" "}
                     <button
@@ -106,7 +106,7 @@ export default function AdminOrders() {
                     <span>
                       {it.name} × {it.quantity}
                     </span>
-                    <span>৳{it.price * it.quantity}</span>
+                    <span>₹{it.price * it.quantity}</span>
                   </div>
                 ))}
               </div>

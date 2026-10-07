@@ -91,7 +91,7 @@ export default function OrdersPage() {
                   >
                     {order.status.toUpperCase()}
                   </span>
-                  <p className="font-bold text-blue-600 mt-1">৳{order.total}</p>
+                  <p className="font-bold text-blue-600 mt-1">₹{order.total}</p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -105,7 +105,7 @@ export default function OrdersPage() {
                     <div className="flex-1 text-sm">
                       <p className="font-medium">{item.name}</p>
                       <p className="text-gray-500">
-                        ৳{item.price} × {item.quantity}
+                        ₹{item.price} × {item.quantity}
                       </p>
                     </div>
                   </div>

@@ -62,7 +62,7 @@ export default function CartPage() {
                   {item.variantLabel && (
                     <p className="text-xs text-gray-500">{item.variantLabel}</p>
                   )}
-                  <p className="text-blue-600 font-bold mt-1">৳{unitPrice}</p>
+                  <p className="text-blue-600 font-bold mt-1">₹{unitPrice}</p>
                 </div>
                 <div className="flex items-center border rounded-lg">
                   <button
@@ -80,7 +80,7 @@ export default function CartPage() {
                   </button>
                 </div>
                 <p className="font-bold w-20 text-right">
-                  ৳{unitPrice * item.quantity}
+                  ₹{unitPrice * item.quantity}
                 </p>
                 <button
                   onClick={() => removeItem(key)}
@@ -97,7 +97,7 @@ export default function CartPage() {
           <h2 className="font-bold text-lg mb-4">Order Summary</h2>
           <div className="flex justify-between mb-2">
             <span>Subtotal</span>
-            <span>৳{total}</span>
+            <span>₹{total}</span>
           </div>
           <div className="flex justify-between mb-2">
             <span>Shipping</span>
@@ -106,7 +106,7 @@ export default function CartPage() {
           <hr className="my-3" />
           <div className="flex justify-between font-bold text-lg mb-4">
             <span>Total</span>
-            <span className="text-blue-600">৳{total}</span>
+            <span className="text-blue-600">₹{total}</span>
           </div>
           <Link href="/checkout" className="btn-primary block text-center">
             Proceed to Checkout

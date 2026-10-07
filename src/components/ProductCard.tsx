@@ -57,20 +57,46 @@ export default function ProductCard({
     ? Math.round(((mrp! - price) / mrp!) * 100)
     : 0;
 
+  const stock = firstVariant ? firstVariant.stock : product.stock;
   const outOfStock = firstVariant
     ? !firstVariant.enabled || firstVariant.stock <= 0
     : product.stock <= 0;
 
+  /* ───────── Variant suffix — same logic as ProductDetailClient ───────── */
   const variantSuffix = useMemo(() => {
-    if (!firstVariant || !product.options?.length) return "";
-    const parts: string[] = [];
-    product.options.forEach((opt, i) => {
-      const valId = firstVariant.optionValueIds[i];
-      const v = opt.values.find((x) => x.id === valId);
-      if (v?.label) parts.push(v.label);
+    if (!hasVariants || !firstVariant) return "";
+
+    const selected: Record<string, string> = {};
+    product.options!.forEach((opt, i) => {
+      selected[opt.id] = firstVariant.optionValueIds[i];
     });
-    return parts.length ? parts.join(" · ") : "";
-  }, [firstVariant, product.options]);
+
+    const ramOptIdx = product.options!.findIndex((o) => /ram/i.test(o.name));
+    const ramLabel =
+      ramOptIdx >= 0 ? selected[product.options![ramOptIdx].id] : undefined;
+
+    const ramValue =
+      ramLabel && ramOptIdx >= 0
+        ? product.options![ramOptIdx].values.find((v) => v.id === ramLabel)
+            ?.label
+        : undefined;
+
+    const restParts: string[] = [];
+    product.options!.forEach((o, i) => {
+      if (i === ramOptIdx) return;
+      const valId = selected[o.id];
+      if (!valId) return;
+      const v = o.values.find((x) => x.id === valId);
+      if (v?.label) restParts.push(v.label);
+    });
+
+    const groups: string[] = [];
+    if (restParts.length) groups.push(`(${restParts.join(", ")})`);
+    if (ramValue) groups.push(`(${ramValue})`);
+    return groups.length ? ` ${groups.join(" ")}` : "";
+  }, [hasVariants, firstVariant, product.options]);
+
+  const displayName = `${product.name}${variantSuffix}`;
 
   const handleAdd = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -99,79 +125,95 @@ export default function ProductCard({
         variantLabel: labelParts.join(" / "),
         selectedOptions,
       });
-      toast.success(`${product.name} added to cart`);
+      toast.success(`${displayName} added to cart`);
       return;
     }
 
     addItem(product, 1);
-    toast.success(`${product.name} added to cart`);
+    toast.success(`${displayName} added to cart`);
   };
 
+  /* Stock link label + color */
+  const stockLabel = outOfStock
+    ? "Out of stock"
+    : stock <= 5
+      ? `Only ${stock} left`
+      : "In stock";
+  const stockClass = outOfStock
+    ? "text-red-600 hover:text-red-700"
+    : stock <= 5
+      ? "text-amber-600 hover:text-amber-700"
+      : "text-green-600 hover:text-green-700";
+
   return (
-    <Link
-      href={`/products/${product.id}`}
-      className="group bg-white rounded-xl border border-gray-100 hover:border-gray-200 hover:shadow-md transition-all overflow-hidden flex flex-col"
-    >
-      {/* Image — fills the box edge to edge */}
-      <div className="relative aspect-square bg-white overflow-hidden">
-        <img
-          src={displayImage}
-          alt={product.name}
-          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-        />
+    <div className="group bg-white rounded-lg border border-gray-100 hover:border-gray-200 hover:shadow-md transition-all overflow-hidden flex flex-col">
+      {/* Image — clickable */}
+      <Link
+        href={`/products/${product.id}`}
+        className="relative block bg-gradient-to-br from-gray-50 to-white p-2"
+      >
+        <div className="relative aspect-square rounded-md overflow-hidden bg-white">
+          <img
+            src={displayImage}
+            alt={displayName}
+            className="absolute inset-0 w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+          />
 
-        {hasDiscount && (
-          <span className="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm">
-            -{discountPct}%
-          </span>
-        )}
+          {hasDiscount && (
+            <span className="absolute top-1.5 left-1.5 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+              -{discountPct}%
+            </span>
+          )}
 
-        {outOfStock && (
-          <span className="absolute top-2 right-2 bg-gray-800/90 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
-            Out
-          </span>
-        )}
-      </div>
+          {outOfStock && (
+            <span className="absolute top-1.5 right-1.5 bg-gray-800/90 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded">
+              Out
+            </span>
+          )}
+        </div>
+      </Link>
 
       {/* Body */}
-      <div className="p-2.5 flex-1 flex flex-col">
-        <p className="text-[10px] text-gray-500 uppercase tracking-wide truncate">
-          {product.brand}
-        </p>
+      <div className="px-2.5 pb-2.5 pt-1 flex-1 flex flex-col">
+        {/* Product name — clickable link */}
+        <Link
+          href={`/products/${product.id}`}
+          className="text-[11px] font-medium line-clamp-2 mt-0.5 leading-snug text-gray-800 hover:text-blue-600 transition-colors"
+        >
+          {displayName}
+        </Link>
 
-        <h3 className="text-xs font-medium line-clamp-2 mt-0.5 leading-snug text-gray-800">
-          {product.name}
-        </h3>
-
-        {variantSuffix && (
-          <p className="text-[10px] text-gray-500 truncate mt-1">
-            {variantSuffix}
-          </p>
-        )}
-
-        <div className="mt-auto pt-2 flex items-end gap-1.5 flex-wrap">
-          <span className="text-sm font-bold text-blue-600 leading-none">
-            ৳{price}
+        <div className="mt-auto pt-1.5 flex items-baseline gap-1.5 flex-wrap">
+          <span className="text-[13px] font-bold text-blue-600 leading-none">
+            ₹{price}
           </span>
           {hasDiscount && (
-            <span className="text-[11px] line-through text-gray-400 leading-none">
-              ৳{mrp}
+            <span className="text-[10px] line-through text-gray-400 leading-none">
+              ₹{mrp}
             </span>
           )}
         </div>
 
+        {/* Stock link — navigates to product page */}
+        <Link
+          href={`/products/${product.id}`}
+          className={`text-[10px] font-medium underline-offset-2 hover:underline mt-0.5 ${stockClass}`}
+        >
+          {stockLabel}
+        </Link>
+
         <button
           onClick={handleAdd}
           disabled={outOfStock}
-          className={`mt-2 w-full text-[11px] font-semibold py-1.5 rounded-lg transition ${
+          className={`mt-1.5 w-full text-[10px] font-semibold py-1.5 rounded-md transition-all ${
             outOfStock
-              ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700 text-white"
+              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+              : "bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white shadow-sm hover:shadow"
           }`}
         >
           {outOfStock ? "Out of Stock" : "Add to Cart"}
         </button>
       </div>
-    </Link>
+    </div>
   );
 }

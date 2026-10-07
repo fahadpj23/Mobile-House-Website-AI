@@ -203,11 +203,11 @@ export default function CheckoutPage() {
                       </p>
                     )}
                     <p className="text-[11px] text-gray-500">
-                      ৳{unit} × {i.quantity}
+                      ₹{unit} × {i.quantity}
                     </p>
                   </div>
                   <span className="font-medium whitespace-nowrap">
-                    ৳{unit * i.quantity}
+                    ₹{unit * i.quantity}
                   </span>
                 </div>
               );
@@ -216,7 +216,7 @@ export default function CheckoutPage() {
           <hr className="my-3" />
           <div className="flex justify-between text-sm mb-1">
             <span>Subtotal</span>
-            <span>৳{total}</span>
+            <span>₹{total}</span>
           </div>
           <div className="flex justify-between text-sm mb-3">
             <span>Shipping</span>
@@ -224,7 +224,7 @@ export default function CheckoutPage() {
           </div>
           <div className="flex justify-between font-bold text-lg mb-4">
             <span>Total</span>
-            <span className="text-blue-600">৳{total}</span>
+            <span className="text-blue-600">₹{total}</span>
           </div>
           <button
             type="submit"
