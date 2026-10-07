@@ -80,19 +80,6 @@ function iconFor(slug: string, name: string): string {
   return "📦";
 }
 
-/* ─── Skeleton-style shimmer for category cards ─── */
-const SKELETON_BASE =
-  "relative overflow-hidden bg-white ring-1 ring-gray-200/80 hover:ring-gray-300";
-
-function SkeletonShine() {
-  return (
-    <span
-      aria-hidden
-      className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out bg-gradient-to-r from-transparent via-white/60 to-transparent"
-    />
-  );
-}
-
 export default async function HomePage() {
   const [products, heroBanners, midBanners, offers, mostSelling, categories] =
     await Promise.all([
@@ -171,14 +158,14 @@ export default async function HomePage() {
     return a.name.localeCompare(b.name);
   });
 
-  /* ────────── Featured (unified, no category split) ────────── */
+  /* ────────── Featured ────────── */
   const featuredProducts = (() => {
     const flagged = products.filter((p) => p.isFeatured);
     const source = flagged.length > 0 ? flagged : products;
     return source.slice(0, 10);
   })();
 
-  /* ────────── Most Selling (unified, no category split) ────────── */
+  /* ────────── Most Selling ────────── */
   const mostSellingProducts = (() => {
     const topIds = new Set(mostSelling.map((p) => p.id));
     const extras = products
@@ -244,52 +231,38 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ═══════════ CATEGORY GRID — skeleton style ═══════════ */}
+      {/* ═══════════ CATEGORY GRID ═══════════ */}
       {categoryCards.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 pt-8 md:pt-12">
-          <div className="text-center mb-6">
-            <span className="text-[10px] font-bold tracking-[0.2em] text-blue-600 uppercase">
-              Explore
-            </span>
-            <h2 className="text-xl md:text-2xl font-bold text-gray-900 mt-1 tracking-tight">
+        <section className="max-w-7xl mx-auto px-4 pt-8 md:pt-10">
+          <div className="text-center mb-4 md:mb-5">
+            <h2 className="text-lg md:text-xl font-bold text-gray-900 mt-1 tracking-tight">
               Shop by Category
             </h2>
-            <p className="text-xs text-gray-500 mt-1.5">
-              Find exactly what you're looking for
-            </p>
           </div>
 
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 lg:grid-cols-9 gap-2 md:gap-3">
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 lg:grid-cols-9 gap-2 md:gap-2.5">
             {categoryCards.map((c) => (
               <Link
                 key={c.slug}
                 href={`/products?category=${c.slug}`}
-                className={`group ${SKELETON_BASE} rounded-xl p-3 flex flex-col items-center justify-center gap-2 hover:-translate-y-0.5 hover:shadow-md transition-all duration-300`}
+                className="group flex flex-col items-center gap-1.5 rounded-xl border border-gray-100 bg-white px-1.5 py-2.5 hover:border-blue-200 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
               >
-                <SkeletonShine />
-
-                <div className="relative w-9 h-9 md:w-10 md:h-10 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 ring-1 ring-gray-200/60 flex items-center justify-center overflow-hidden">
-                  <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/70 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                  <span className="text-base md:text-lg leading-none grayscale group-hover:grayscale-0 transition-all duration-300">
+                <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 ring-1 ring-blue-100/70 flex items-center justify-center group-hover:from-blue-100 group-hover:to-indigo-200 transition-colors duration-300">
+                  <span className="text-base md:text-lg leading-none transition-transform duration-300 group-hover:scale-110">
                     {c.icon}
                   </span>
                 </div>
 
-                <span className="text-[10px] md:text-[11px] font-medium text-gray-600 text-center leading-tight line-clamp-2 group-hover:text-gray-900 transition-colors">
+                <span className="text-[10px] md:text-[11px] font-medium text-gray-700 text-center leading-tight line-clamp-2 group-hover:text-blue-700 transition-colors">
                   {c.name}
                 </span>
-
-                <div className="w-full space-y-1 opacity-40 group-hover:opacity-60 transition-opacity">
-                  <div className="h-1 rounded-full bg-gray-200/80 w-3/4 mx-auto" />
-                  <div className="h-1 rounded-full bg-gray-200/60 w-1/2 mx-auto" />
-                </div>
               </Link>
             ))}
           </div>
         </section>
       )}
 
-      {/* ═══════════ FEATURED (unified) ═══════════ */}
+      {/* ═══════════ FEATURED ═══════════ */}
       {featuredProducts.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 py-10 md:py-14">
           <div className="flex items-end justify-between gap-4 mb-4">
@@ -366,7 +339,7 @@ export default async function HomePage() {
       {/* ═══════════ SPECIAL OFFERS ═══════════ */}
       {offers.length > 0 && <SpecialOffersSection offers={offers} />}
 
-      {/* ═══════════ MOST SELLING (unified) ═══════════ */}
+      {/* ═══════════ MOST SELLING ═══════════ */}
       {mostSellingProducts.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 py-10 md:py-14">
           <div className="flex items-end justify-between gap-4 mb-4">

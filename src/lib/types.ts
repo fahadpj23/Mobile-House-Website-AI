@@ -96,6 +96,8 @@ export interface Banner {
   active: boolean;
   title?: string;
   subtitle?: string;
+  order?: number;
+  createdAt?: number;
 }
 
 export interface SpecialOffer {

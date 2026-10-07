@@ -1,6 +1,7 @@
+// app/products/[id]/ProductDetailClient.tsx
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Product } from "@/lib/types";
 import { useCart } from "@/components/CartProvider";
 import toast from "react-hot-toast";
@@ -18,6 +19,7 @@ import {
 export default function ProductDetailClient({ product }: { product: Product }) {
   const { addItem } = useCart();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [qty, setQty] = useState(1);
@@ -26,23 +28,34 @@ export default function ProductDetailClient({ product }: { product: Product }) {
 
   const hasVariants = !!product.options?.length && !!product.variants?.length;
 
+  // ★ Pre-select: URL variant → first available variant
   useEffect(() => {
     if (!hasVariants) return;
 
-    const firstAvailable =
-      product.variants!.find((v) => v.enabled && v.stock > 0) ||
-      product.variants!.find((v) => v.enabled) ||
-      product.variants![0];
+    const variantIdFromUrl = searchParams.get("variant");
 
-    if (!firstAvailable) return;
+    // 1) Try the variant ID from the URL
+    let target = variantIdFromUrl
+      ? product.variants!.find((v) => v.id === variantIdFromUrl && v.enabled)
+      : undefined;
+
+    // 2) Otherwise pick first available
+    if (!target) {
+      target =
+        product.variants!.find((v) => v.enabled && v.stock > 0) ||
+        product.variants!.find((v) => v.enabled) ||
+        product.variants![0];
+    }
+
+    if (!target) return;
 
     const preset: Record<string, string> = {};
     product.options!.forEach((opt, i) => {
-      preset[opt.id] = firstAvailable.optionValueIds[i];
+      preset[opt.id] = target.optionValueIds[i];
     });
     setSelected(preset);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.id]);
+  }, [product.id, searchParams]);
 
   const activeVariant = useMemo(() => {
     if (!hasVariants) return undefined;
@@ -112,21 +125,16 @@ export default function ProductDetailClient({ product }: { product: Product }) {
 
   const safeActiveImg = Math.min(activeImg, gallery.length - 1);
 
-  // ★ Selling price
   const price = activeVariant ? activeVariant.price : product.price;
-
-  // ★ MRP (original list price)
   const originalPrice = activeVariant
-    ? activeVariant.discountPrice
+    ? activeVariant.discountPrice // change to .mrp if renamed
     : product.discountPrice;
-
   const stock = activeVariant ? activeVariant.stock : product.stock;
 
   useEffect(() => {
     setQty((q) => Math.max(1, Math.min(q, Math.max(1, stock))));
   }, [stock]);
 
-  // ★ Discount only when MRP > price
   const hasMrp = typeof originalPrice === "number" && originalPrice > price;
   const discountPct = hasMrp
     ? Math.round(((originalPrice! - price) / originalPrice!) * 100)
@@ -264,7 +272,6 @@ export default function ProductDetailClient({ product }: { product: Product }) {
           {displayTitle}
         </h1>
 
-        {/* ★ PRICE + MRP + DISCOUNT */}
         <div className="flex items-end gap-3 flex-wrap mb-2">
           <div>
             <p className="text-[11px] text-gray-500 mb-0.5">Price</p>

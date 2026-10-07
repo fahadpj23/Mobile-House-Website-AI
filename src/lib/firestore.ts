@@ -1,3 +1,4 @@
+// lib/firestore.ts
 import {
   collection,
   addDoc,
@@ -10,7 +11,6 @@ import {
   where,
   orderBy,
   setDoc,
-  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { deleteImageByUrl, deleteImagesByUrl } from "./storage";
@@ -23,6 +23,7 @@ import {
   SpecTemplate,
   Banner,
   SpecialOffer,
+  Customer,
 } from "./types";
 
 // ============================================================
@@ -51,10 +52,6 @@ export const addProduct = async (product: Omit<Product, "id">) => {
   });
 };
 
-/**
- * Update a product. Automatically deletes any images that were
- * removed by comparing old vs new image arrays.
- */
 export const updateProduct = async (id: string, product: Partial<Product>) => {
   if (product.images && product.images.length >= 0) {
     const existing = await getDoc(doc(db, "websiteProducts", id));
@@ -76,9 +73,6 @@ export const updateProduct = async (id: string, product: Partial<Product>) => {
   });
 };
 
-/**
- * Delete a product AND all its images from Firebase Storage.
- */
 export const deleteProduct = async (id: string) => {
   const productSnap = await getDoc(doc(db, "websiteProducts", id));
   if (!productSnap.exists()) {
@@ -149,11 +143,6 @@ export const getBrands = async (): Promise<Brand[]> => {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Brand);
 };
 
-/**
- * Add a new brand. Uses an auto-generated doc id (NOT the slug),
- * so `deleteBrand(id)` works consistently with `getBrands()` results.
- * Prevents duplicates by case-insensitive name.
- */
 export const addBrand = async (name: string, logo?: string): Promise<Brand> => {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Brand name is required");
@@ -164,7 +153,6 @@ export const addBrand = async (name: string, logo?: string): Promise<Brand> => {
     .replace(/(^-|-$)/g, "");
   const nameLower = trimmed.toLowerCase();
 
-  // Dedupe by slug first (fast path for legacy data), then by nameLower
   const bySlug = await getDocs(
     query(collection(db, "brands"), where("slug", "==", slug)),
   );
@@ -192,9 +180,6 @@ export const addBrand = async (name: string, logo?: string): Promise<Brand> => {
   return { id: ref.id, name: trimmed, slug, logo: logo || "" } as Brand;
 };
 
-/**
- * Delete a brand. Also removes its logo from Storage if present.
- */
 export const deleteBrand = async (id: string) => {
   const snap = await getDoc(doc(db, "brands", id));
   if (snap.exists()) {
@@ -255,21 +240,50 @@ export const updateOrder = async (id: string, data: Partial<Order>) => {
 // ============================================================
 const bannersCol = collection(db, "banners");
 
+/**
+ * Fetch banners. Optionally filter by position.
+ * Sort is done in memory so banners without an `order` field
+ * are not silently dropped by Firestore's orderBy().
+ */
 export async function getBanners(position?: string): Promise<Banner[]> {
-  let q = query(bannersCol, orderBy("order", "asc"));
-  if (position) {
-    q = query(
-      bannersCol,
-      where("position", "==", position),
-      orderBy("order", "asc"),
-    );
-  }
+  const constraints = position ? [where("position", "==", position)] : [];
+  const q = query(bannersCol, ...constraints);
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Banner[];
+
+  return snap.docs
+    .map(
+      (d) =>
+        ({
+          id: d.id,
+          ...d.data(),
+        }) as Banner & { order?: number; createdAt?: number },
+    )
+    .sort((a, b) => {
+      const ao = a.order ?? Number.MAX_SAFE_INTEGER;
+      const bo = b.order ?? Number.MAX_SAFE_INTEGER;
+      if (ao !== bo) return ao - bo;
+      return (a.createdAt ?? 0) - (b.createdAt ?? 0);
+    });
 }
 
+/**
+ * Add a banner.
+ * Writes `order` (max existing + 1) so it sorts to the end,
+ * and `createdAt` for stable tie-breaking.
+ */
 export async function addBanner(data: Omit<Banner, "id">) {
-  return addDoc(bannersCol, { ...data, createdAt: Date.now() });
+  // Compute next order value from existing banners
+  const existing = await getDocs(bannersCol);
+  const maxOrder = existing.docs.reduce((max, d) => {
+    const o = (d.data() as { order?: number }).order;
+    return typeof o === "number" && o > max ? o : max;
+  }, 0);
+
+  return addDoc(bannersCol, {
+    ...data,
+    order: maxOrder + 1,
+    createdAt: Date.now(),
+  });
 }
 
 export async function updateBanner(id: string, data: Partial<Banner>) {
@@ -304,16 +318,19 @@ const offersCol = collection(db, "specialOffers");
 export async function getSpecialOffers(
   activeOnly = false,
 ): Promise<SpecialOffer[]> {
-  let q = query(offersCol, orderBy("createdAt", "desc"));
-  if (activeOnly) {
-    q = query(
-      offersCol,
-      where("active", "==", true),
-      orderBy("createdAt", "desc"),
-    );
-  }
+  const constraints = activeOnly ? [where("active", "==", true)] : [];
+  const q = query(offersCol, ...constraints);
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as SpecialOffer[];
+
+  return snap.docs
+    .map(
+      (d) =>
+        ({
+          id: d.id,
+          ...d.data(),
+        }) as SpecialOffer & { createdAt?: number },
+    )
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
 }
 
 export async function addSpecialOffer(data: Omit<SpecialOffer, "id">) {
@@ -365,13 +382,12 @@ export async function getMostSellingProducts(limit = 8): Promise<Product[]> {
 // ============================================================
 export interface Series {
   id: string;
-  name: string; // display name: "S26 Series"
-  slug: string; // "s26-series"
+  name: string;
+  slug: string;
 }
 
 const SERIES_COLLECTION = "series";
 
-/** Slugify: "S26 Series" → "s26-series" */
 const slugify = (input: string) =>
   input
     .toLowerCase()
@@ -393,10 +409,6 @@ export async function getSeries(): Promise<Series[]> {
   });
 }
 
-/**
- * Add a series. Prevents duplicates by slug.
- * Returns the existing one if the slug already exists.
- */
 export async function addSeries(name: string): Promise<Series> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Series name is required");
@@ -428,24 +440,18 @@ export async function addSeries(name: string): Promise<Series> {
 export async function deleteSeries(id: string) {
   return deleteDoc(doc(db, SERIES_COLLECTION, id));
 }
+
 // ============================================================
 // CUSTOMERS
 // ============================================================
-import type { Customer } from "./types";
-
 const CUSTOMERS_COLLECTION = "customers";
 
-/** Fetch a customer profile by UID. Returns null if none. */
 export async function getCustomer(uid: string): Promise<Customer | null> {
   const snap = await getDoc(doc(db, CUSTOMERS_COLLECTION, uid));
   if (!snap.exists()) return null;
   return { id: snap.id, ...(snap.data() as Omit<Customer, "id">) };
 }
 
-/**
- * Create or update a customer profile in `customers/{uid}`.
- * Merges with existing data so you never overwrite `createdAt`.
- */
 export async function upsertCustomer(
   uid: string,
   data: Partial<Customer> & { email: string },
