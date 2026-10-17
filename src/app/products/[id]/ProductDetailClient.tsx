@@ -1,7 +1,8 @@
 // app/products/[id]/ProductDetailClient.tsx
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import Image from "next/image";
 import { Product } from "@/lib/types";
 import { useCart } from "@/components/CartProvider";
 import toast from "react-hot-toast";
@@ -9,37 +10,41 @@ import {
   ShoppingCart,
   Truck,
   Shield,
-  RotateCcw,
   Minus,
   Plus,
   Check,
   AlertTriangle,
 } from "lucide-react";
 
+// 1×1 transparent PNG — for blur placeholder
+const BLUR_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+
 export default function ProductDetailClient({ product }: { product: Product }) {
   const { addItem } = useCart();
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [qty, setQty] = useState(1);
   const [activeImg, setActiveImg] = useState(0);
   const [justAdded, setJustAdded] = useState(false);
+  const [imgError, setImgError] = useState(false); // 👈 Track image errors
 
   const hasVariants = !!product.options?.length && !!product.variants?.length;
 
-  // ★ Pre-select: URL variant → first available variant
+  // ★ 1. RESTORE VARIANT FROM URL ON LOAD
   useEffect(() => {
     if (!hasVariants) return;
 
     const variantIdFromUrl = searchParams.get("variant");
 
-    // 1) Try the variant ID from the URL
     let target = variantIdFromUrl
-      ? product.variants!.find((v) => v.id === variantIdFromUrl && v.enabled)
+      ? product.variants!.find((v) => v.id === variantIdFromUrl)
       : undefined;
 
-    // 2) Otherwise pick first available
+    // Fallback to first available
     if (!target) {
       target =
         product.variants!.find((v) => v.enabled && v.stock > 0) ||
@@ -64,8 +69,22 @@ export default function ProductDetailClient({ product }: { product: Product }) {
     );
   }, [hasVariants, product.options, product.variants, selected]);
 
+  // ★ 2. UPDATE URL WHEN VARIANT CHANGES (for persistence)
+  useEffect(() => {
+    if (!hasVariants || !activeVariant) return;
+
+    const currentUrlVariant = searchParams.get("variant");
+    // Only update if the URL doesn't match the active variant
+    if (currentUrlVariant !== activeVariant.id) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("variant", activeVariant.id);
+      // router.replace prevents adding to history on every click
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    }
+  }, [activeVariant, hasVariants, searchParams, router, pathname]);
+
   const variantSuffix = useMemo(() => {
-    if (!hasVariants) return "";
+    if (!hasVariants || !activeVariant) return "";
 
     const ramOptIdx = product.options!.findIndex((o) => /ram/i.test(o.name));
     const ramLabel =
@@ -90,7 +109,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
     if (restParts.length) groups.push(`(${restParts.join(", ")})`);
     if (ramValue) groups.push(`(${ramValue})`);
     return groups.length ? ` ${groups.join(" ")}` : "";
-  }, [hasVariants, product.options, selected]);
+  }, [hasVariants, product.options, selected, activeVariant]);
 
   const displayTitle = `${product.name}${variantSuffix}`;
 
@@ -119,15 +138,18 @@ export default function ProductDetailClient({ product }: { product: Product }) {
     return out;
   }, [hasVariants, activeVariant, product.images, product.options]);
 
+  // Reset image on gallery change (when variant changes)
   useEffect(() => {
     setActiveImg(0);
-  }, [gallery.length]);
+    setImgError(false);
+  }, [gallery]);
 
   const safeActiveImg = Math.min(activeImg, gallery.length - 1);
+  const currentImage = gallery[safeActiveImg] || "/placeholder.png";
 
   const price = activeVariant ? activeVariant.price : product.price;
   const originalPrice = activeVariant
-    ? activeVariant.discountPrice // change to .mrp if renamed
+    ? activeVariant.discountPrice
     : product.discountPrice;
   const stock = activeVariant ? activeVariant.stock : product.stock;
 
@@ -214,12 +236,29 @@ export default function ProductDetailClient({ product }: { product: Product }) {
     <div className="max-w-7xl mx-auto px-4 py-8 grid md:grid-cols-2 gap-8">
       {/* IMAGES */}
       <div className="md:sticky md:top-20 self-start">
-        <div className="bg-white rounded-2xl overflow-hidden aspect-square max-w-md mx-auto flex items-center justify-center p-6 border shadow-sm">
-          <img
-            src={gallery[safeActiveImg] || "/placeholder.png"}
-            alt={displayTitle}
-            className="w-full h-full object-contain"
-          />
+        <div className="relative bg-white rounded-2xl overflow-hidden aspect-square max-w-md mx-auto border shadow-sm">
+          {/* ★ 3. USE STANDARD <img> WITH ERROR HANDLING TO PREVENT "NOT LOADING" BUGS */}
+          {imgError ? (
+            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50">
+              <AlertTriangle size={32} className="mb-2" />
+              <p className="text-xs">Image unavailable</p>
+            </div>
+          ) : (
+            <Image
+              key={currentImage} // Remount on change
+              src={currentImage}
+              alt={displayTitle}
+              fill
+              priority
+              fetchPriority="high"
+              decoding="sync"
+              placeholder="blur"
+              blurDataURL={BLUR_DATA_URL}
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className="object-contain p-4"
+              onError={() => setImgError(true)}
+            />
+          )}
         </div>
 
         {gallery.length > 1 && (
@@ -227,14 +266,25 @@ export default function ProductDetailClient({ product }: { product: Product }) {
             {gallery.map((img, i) => (
               <button
                 key={i}
-                onClick={() => setActiveImg(i)}
-                className={`w-14 h-14 rounded-lg overflow-hidden border-2 transition ${
+                onClick={() => {
+                  setActiveImg(i);
+                  setImgError(false);
+                }}
+                className={`relative w-14 h-14 rounded-lg overflow-hidden border-2 transition bg-white ${
                   safeActiveImg === i
                     ? "border-blue-600 ring-2 ring-blue-100"
                     : "border-gray-200 hover:border-gray-400"
                 }`}
               >
-                <img src={img} alt="" className="w-full h-full object-cover" />
+                <Image
+                  src={img}
+                  alt=""
+                  fill
+                  sizes="56px"
+                  loading="eager"
+                  decoding="async"
+                  className="object-contain p-0.5"
+                />
               </button>
             ))}
           </div>
@@ -350,11 +400,13 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                         <button
                           key={v.id}
                           type="button"
-                          onClick={() =>
-                            setSelected((s) => ({ ...s, [opt.id]: v.id }))
-                          }
+                          onClick={() => {
+                            setSelected((s) => ({ ...s, [opt.id]: v.id }));
+                            setActiveImg(0); // Reset gallery when color changes
+                            setImgError(false);
+                          }}
                           disabled={!available}
-                          className={`relative rounded-lg border-2 overflow-hidden transition-all ${
+                          className={`relative rounded-lg border-2 overflow-hidden transition-all bg-white ${
                             active
                               ? "border-blue-600 shadow-md shadow-blue-100"
                               : "border-gray-200 hover:border-gray-400"
@@ -363,30 +415,38 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                           }`}
                         >
                           {opt.type === "color" ? (
-                            <div className="w-14">
-                              {v.images?.[0] ? (
-                                <img
-                                  src={v.images[0]}
-                                  alt={v.label}
-                                  className="w-14 h-14 object-cover"
-                                />
-                              ) : (
-                                <div
-                                  className="w-14 h-14 flex items-center justify-center text-xs text-gray-400 bg-gray-50"
-                                  style={
-                                    v.colorHex
-                                      ? { background: v.colorHex }
-                                      : undefined
-                                  }
-                                >
-                                  {!v.colorHex && v.label}
-                                </div>
-                              )}
-                              <p className="text-[10px] text-center py-0.5 truncate">
+                            <div className="w-16 flex flex-col items-center">
+                              <div className="relative w-16 h-16 bg-white p-1">
+                                {v.images?.[0] ? (
+                                  <Image
+                                    src={v.images[0]}
+                                    alt={v.label}
+                                    fill
+                                    sizes="64px"
+                                    loading="eager"
+                                    decoding="async"
+                                    placeholder="blur"
+                                    blurDataURL={BLUR_DATA_URL}
+                                    className="object-contain p-0.5"
+                                  />
+                                ) : (
+                                  <div
+                                    className="w-full h-full flex items-center justify-center text-xs text-gray-400 rounded-sm"
+                                    style={
+                                      v.colorHex
+                                        ? { background: v.colorHex }
+                                        : undefined
+                                    }
+                                  >
+                                    {!v.colorHex && v.label}
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-center py-0.5 truncate w-full px-1 bg-gray-50 border-t">
                                 {v.label}
                               </p>
                               {active && (
-                                <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-blue-600 text-white rounded-full flex items-center justify-center">
+                                <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-sm z-10">
                                   <Check size={9} />
                                 </span>
                               )}
@@ -473,10 +533,6 @@ export default function ProductDetailClient({ product }: { product: Product }) {
           <div className="bg-blue-50 border border-blue-100 p-2.5 rounded-xl">
             <Shield className="mx-auto mb-1 text-blue-600" size={18} />
             <p className="text-xs font-medium text-gray-700">Warranty</p>
-          </div>
-          <div className="bg-blue-50 border border-blue-100 p-2.5 rounded-xl">
-            <RotateCcw className="mx-auto mb-1 text-blue-600" size={18} />
-            <p className="text-xs font-medium text-gray-700">7-Day Return</p>
           </div>
         </div>
 

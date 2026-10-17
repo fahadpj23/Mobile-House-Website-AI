@@ -3,7 +3,6 @@ import ProductCard from "@/components/ProductCard";
 import ProductListItem from "@/components/ProductListItem";
 import ProductVariantCard from "@/components/ProductVariantCard";
 import ProductVariantListItem from "@/components/ProductVariantListItem";
-import ProductFilters, { FilterSection } from "@/components/ProductFilters";
 import ViewToggle from "@/components/ViewToggle";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -17,26 +16,12 @@ interface Props {
     category?: string;
     series?: string;
     view?: string;
+    sort?: string;
     [key: string]: string | string[] | undefined;
   };
 }
 
 /* ---------- Helpers ---------- */
-const specParamKey = (key: string) => `spec_${key}`;
-
-function readSpecFilters(
-  sp: Record<string, string | string[] | undefined>,
-): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  for (const [k, v] of Object.entries(sp)) {
-    if (!k.startsWith("spec_")) continue;
-    const specKey = k.slice(5);
-    const values = Array.isArray(v) ? v : v ? [v] : [];
-    if (values.length) out[specKey] = values;
-  }
-  return out;
-}
-
 function buildHref(
   current: Record<string, string | string[] | undefined>,
   overrides: Record<string, string | string[] | undefined>,
@@ -75,6 +60,86 @@ function explodeVariants(products: Product[]): (Product | VariantRow)[] {
     }
   }
   return out;
+}
+
+/* ---------- Sort Options (Relevance removed) ---------- */
+const SORT_OPTIONS = [
+  { key: "popularity", label: "Popularity" },
+  { key: "price_asc", label: "Price -- Low to High" },
+  { key: "price_desc", label: "Price -- High to Low" },
+  { key: "newest", label: "Newest First" },
+] as const;
+
+type SortKey = (typeof SORT_OPTIONS)[number]["key"];
+
+function getPriceOf(item: Product | VariantRow): number {
+  if ("kind" in item && item.kind === "variant") {
+    const v = item.variant as any;
+    return typeof v.price === "number"
+      ? v.price
+      : typeof item.product.price === "number"
+        ? item.product.price
+        : 0;
+  }
+  return typeof (item as Product).price === "number"
+    ? (item as Product).price
+    : 0;
+}
+
+function getPopularityOf(item: Product | VariantRow): number {
+  const p = "kind" in item && item.kind === "variant" ? item.product : item;
+  const anyP = p as any;
+  const candidates = [
+    anyP.popularity,
+    anyP.sales,
+    anyP.sold,
+    anyP.orderCount,
+    anyP.viewCount,
+    anyP.rating,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "number") return c;
+  }
+  return 0;
+}
+
+function getNewestOf(item: Product | VariantRow): number {
+  const p = "kind" in item && item.kind === "variant" ? item.product : item;
+  const anyP = p as any;
+  const candidates = [anyP.createdAt, anyP.updatedAt, anyP.addedAt];
+  for (const c of candidates) {
+    if (c?.seconds) return c.seconds;
+    if (c instanceof Date) return c.getTime() / 1000;
+    if (typeof c === "number") return c;
+    if (typeof c === "string") {
+      const t = Date.parse(c);
+      if (!isNaN(t)) return t / 1000;
+    }
+  }
+  return 0;
+}
+
+function sortItems<T extends Product | VariantRow>(
+  items: T[],
+  sort: SortKey,
+): T[] {
+  const copy = [...items];
+  switch (sort) {
+    case "price_asc":
+      copy.sort((a, b) => getPriceOf(a) - getPriceOf(b));
+      break;
+    case "price_desc":
+      copy.sort((a, b) => getPriceOf(b) - getPriceOf(a));
+      break;
+    case "newest":
+      copy.sort((a, b) => getNewestOf(b) - getNewestOf(a));
+      break;
+    case "popularity":
+    default:
+      copy.sort((a, b) => getPopularityOf(b) - getPopularityOf(a));
+      break;
+  }
+  return copy;
 }
 
 export default async function ProductsPage({ searchParams }: Props) {
@@ -144,6 +209,7 @@ export default async function ProductsPage({ searchParams }: Props) {
     });
   }
 
+  // CATEGORY ONLY — single active category (no mixing)
   if (searchParams.category) {
     const selected = searchParams.category;
     const scope = descendantsOf(selected);
@@ -155,74 +221,27 @@ export default async function ProductsPage({ searchParams }: Props) {
     });
   }
 
-  const appliedSpecs = readSpecFilters(searchParams);
-  const availableSpecs: Record<string, Map<string, number>> = {};
-  for (const p of products) {
-    for (const s of p.specifications || []) {
-      if (!s.key?.trim() || !s.value?.trim()) continue;
-      const key = s.key.trim();
-      const value = s.value.trim();
-      if (!availableSpecs[key]) availableSpecs[key] = new Map();
-      availableSpecs[key].set(value, (availableSpecs[key].get(value) || 0) + 1);
-    }
-  }
-  const specKeys = Object.keys(availableSpecs).sort();
-
-  for (const [key, values] of Object.entries(appliedSpecs)) {
-    if (!values.length) continue;
-    products = products.filter((p) =>
-      (p.specifications || []).some(
-        (s) => s.key === key && values.includes(s.value),
-      ),
-    );
-  }
-
   const activeCategory = categories.find(
     (c) => c.slug === searchParams.category,
   );
-  const activeFilterCount =
-    Object.values(appliedSpecs).reduce((n, v) => n + v.length, 0) +
-    (searchParams.category ? 1 : 0) +
-    (searchParams.series ? 1 : 0) +
-    (searchParams.q ? 1 : 0);
-
-  const chipCategories = (() => {
-    if (!searchParams.category) {
-      return (childrenOf["__root__"] || []).sort((a, b) =>
-        a.name.localeCompare(b.name),
-      );
-    }
-    const sel = searchParams.category;
-    const selCat = catBySlug[sel];
-    if (!selCat) return [];
-    const children = (childrenOf[sel] || []).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    );
-    if (children.length > 0) return children;
-    const siblings = (childrenOf[selCat.parentSlug || "__root__"] || []).sort(
-      (a, b) => a.name.localeCompare(b.name),
-    );
-    return siblings;
-  })();
 
   const activeBreadcrumb = searchParams.category
     ? breadcrumbOf(searchParams.category)
     : [];
 
   const exploded = searchParams.series ? explodeVariants(products) : null;
-  const resultCount = exploded ? exploded.length : products.length;
 
-  const filterSections: FilterSection[] = specKeys.map((key) => {
-    const values = Array.from(availableSpecs[key].entries()).sort((a, b) =>
-      a[0].localeCompare(b[0]),
-    );
-    return {
-      key,
-      paramKey: specParamKey(key),
-      selected: appliedSpecs[key] || [],
-      options: values.map(([value, count]) => ({ value, count })),
-    };
-  });
+  // SORT — default is now popularity
+  const sortKey: SortKey =
+    (SORT_OPTIONS.find((o) => o.key === searchParams.sort)?.key as SortKey) ||
+    "popularity";
+
+  const sortedProducts = sortItems(products, sortKey);
+  const sortedExploded = exploded ? sortItems(exploded, sortKey) : null;
+
+  const resultCount = sortedExploded
+    ? sortedExploded.length
+    : sortedProducts.length;
 
   const view = searchParams.view === "grid" ? "grid" : "list";
 
@@ -278,17 +297,6 @@ export default async function ProductsPage({ searchParams }: Props) {
           <p className="text-xs text-gray-500">
             Showing {resultCount} {exploded ? "variant" : "product"}
             {resultCount !== 1 ? "s" : ""}
-            {activeFilterCount > 0 && (
-              <>
-                {" • "}
-                <Link
-                  href="/products"
-                  className="text-blue-600 hover:underline"
-                >
-                  Clear all filters
-                </Link>
-              </>
-            )}
           </p>
         </div>
 
@@ -312,130 +320,91 @@ export default async function ProductsPage({ searchParams }: Props) {
         </div>
       )}
 
-      {/* CATEGORY CHIPS */}
-      {!activeSeries && (
-        <div className="flex flex-wrap gap-1.5 mb-4">
-          <Link
-            href={buildHref(searchParams, { category: undefined })}
-            className={`text-xs px-3 py-1 rounded-full border transition ${
-              !searchParams.category
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white border-gray-300 hover:border-blue-500 hover:text-blue-600"
-            }`}
-          >
-            All
-          </Link>
-
-          {activeCategory?.parentSlug && (
+      {/* SORT BAR (top) */}
+      <div className="mb-4 flex items-center gap-2 flex-wrap bg-white border rounded-xl px-3 py-2">
+        <span className="text-xs font-semibold text-gray-700 mr-1">
+          Sort by:
+        </span>
+        {SORT_OPTIONS.map((opt) => {
+          const active = sortKey === opt.key;
+          return (
             <Link
+              key={opt.key}
               href={buildHref(searchParams, {
-                category: activeCategory.parentSlug,
+                // First option (popularity) = default → omit from URL
+                sort: opt.key === "popularity" ? undefined : opt.key,
               })}
-              className="text-xs px-3 py-1 rounded-full border bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100 transition"
+              className={`text-xs px-2.5 py-1 rounded-md border transition ${
+                active
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white border-gray-300 text-gray-700 hover:border-blue-500 hover:text-blue-600"
+              }`}
             >
-              ← {catBySlug[activeCategory.parentSlug]?.name || "Back"}
+              {opt.label}
             </Link>
-          )}
+          );
+        })}
+      </div>
 
-          {chipCategories.map((c) => {
-            const active = searchParams.category === c.slug;
-            return (
-              <Link
-                key={c.id ?? c.slug}
-                href={buildHref(searchParams, {
-                  category: active ? undefined : c.slug,
-                })}
-                className={`text-xs px-3 py-1 rounded-full border transition ${
-                  active
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white border-gray-300 hover:border-blue-500 hover:text-blue-600"
-                }`}
-              >
-                {c.name}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="grid md:grid-cols-[240px_1fr] gap-5">
-        {/* FILTERS */}
-        <div>
-          <ProductFilters
-            sections={filterSections}
-            activeCount={activeFilterCount}
-            clearAllHref="/products"
-          />
-        </div>
-
-        {/* RESULTS */}
-        <div>
-          {resultCount === 0 ? (
-            <div className="text-center py-10 bg-white rounded-xl border">
-              <p className="text-gray-500 text-sm mb-3">
-                {activeSeries
-                  ? `No products found in the "${activeSeries.name}" series.`
-                  : "No products match these filters."}
-              </p>
-              {activeFilterCount > 0 && (
-                <Link
-                  href="/products"
-                  className="inline-block text-xs px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  Clear all filters
-                </Link>
+      {/* RESULTS (full width) */}
+      <div>
+        {resultCount === 0 ? (
+          <div className="text-center py-10 bg-white rounded-xl border">
+            <p className="text-gray-500 text-sm">
+              {activeSeries
+                ? `No products found in the "${activeSeries.name}" series.`
+                : "No products match these filters."}
+            </p>
+          </div>
+        ) : view === "grid" ? (
+          // ─── GRID VIEW ───
+          sortedExploded ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              {sortedExploded.map((item, idx) =>
+                "kind" in item && item.kind === "variant" ? (
+                  <ProductVariantCard
+                    key={`${item.product.id}__${item.variant.id}`}
+                    product={item.product}
+                    variant={item.variant}
+                  />
+                ) : (
+                  <ProductCard
+                    key={`${(item as Product).id}__${idx}`}
+                    product={item as Product}
+                  />
+                ),
               )}
             </div>
-          ) : view === "grid" ? (
-            // ─── GRID VIEW ───
-            exploded ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                {exploded.map((item, idx) =>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              {sortedProducts.map((p) => (
+                <ProductCard key={p.id} product={p} />
+              ))}
+            </div>
+          )
+        ) : (
+          // ─── LIST VIEW ───
+          <div className="bg-white rounded-xl border overflow-hidden divide-y divide-gray-100">
+            {sortedExploded
+              ? sortedExploded.map((item, idx) =>
                   "kind" in item && item.kind === "variant" ? (
-                    <ProductVariantCard
+                    <ProductVariantListItem
                       key={`${item.product.id}__${item.variant.id}`}
                       product={item.product}
                       variant={item.variant}
                     />
                   ) : (
-                    <ProductCard
+                    <ProductListItem
                       key={`${(item as Product).id}__${idx}`}
                       product={item as Product}
                     />
                   ),
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                {products.map((p) => (
-                  <ProductCard key={p.id} product={p} />
+                )
+              : sortedProducts.map((p) => (
+                  <ProductListItem key={p.id} product={p} />
                 ))}
-              </div>
-            )
-          ) : (
-            // ─── LIST VIEW ───
-            <div className="bg-white rounded-xl border overflow-hidden divide-y divide-gray-100">
-              {exploded
-                ? exploded.map((item, idx) =>
-                    "kind" in item && item.kind === "variant" ? (
-                      <ProductVariantListItem
-                        key={`${item.product.id}__${item.variant.id}`}
-                        product={item.product}
-                        variant={item.variant}
-                      />
-                    ) : (
-                      <ProductListItem
-                        key={`${(item as Product).id}__${idx}`}
-                        product={item as Product}
-                      />
-                    ),
-                  )
-                : products.map((p) => (
-                    <ProductListItem key={p.id} product={p} />
-                  ))}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

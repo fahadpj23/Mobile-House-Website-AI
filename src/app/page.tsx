@@ -1,4 +1,6 @@
+// app/page.tsx
 import Link from "next/link";
+import Image from "next/image";
 import {
   getProducts,
   getBanners,
@@ -174,20 +176,6 @@ export default async function HomePage() {
     return [...mostSelling, ...extras].slice(0, 10);
   })();
 
-  /* ────────── Category grid ────────── */
-  const rootCategories = categories
-    .filter((c) => !c.parentSlug)
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  const categoryCards = rootCategories
-    .map((c) => ({
-      slug: c.slug,
-      name: c.name,
-      icon: iconFor(c.slug, c.name),
-      hasProducts: (bucketMap[c.slug]?.products.length ?? 0) > 0,
-    }))
-    .filter((c) => c.hasProducts);
-
   return (
     <div className="bg-white">
       {/* ═══════════ HERO ═══════════ */}
@@ -231,59 +219,17 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ═══════════ CATEGORY GRID ═══════════ */}
-      {categoryCards.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 pt-8 md:pt-10">
-          <div className="text-center mb-4 md:mb-5">
-            <h2 className="text-lg md:text-xl font-bold text-gray-900 mt-1 tracking-tight">
-              Shop by Category
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 lg:grid-cols-9 gap-2 md:gap-2.5">
-            {categoryCards.map((c) => (
-              <Link
-                key={c.slug}
-                href={`/products?category=${c.slug}`}
-                className="group flex flex-col items-center gap-1.5 rounded-xl border border-gray-100 bg-white px-1.5 py-2.5 hover:border-blue-200 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300"
-              >
-                <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 ring-1 ring-blue-100/70 flex items-center justify-center group-hover:from-blue-100 group-hover:to-indigo-200 transition-colors duration-300">
-                  <span className="text-base md:text-lg leading-none transition-transform duration-300 group-hover:scale-110">
-                    {c.icon}
-                  </span>
-                </div>
-
-                <span className="text-[10px] md:text-[11px] font-medium text-gray-700 text-center leading-tight line-clamp-2 group-hover:text-blue-700 transition-colors">
-                  {c.name}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
       {/* ═══════════ FEATURED ═══════════ */}
       {featuredProducts.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 py-10 md:py-14">
-          <div className="flex items-end justify-between gap-4 mb-4">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="w-0.5 h-6 rounded-full bg-gradient-to-b from-amber-400 to-orange-500 shrink-0" />
-              <div className="min-w-0">
-                <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight flex items-center gap-1.5">
-                  <span className="text-lg">⭐</span>
-                  <span className="truncate">Featured Products</span>
-                </h2>
-              </div>
+          <div className="flex items-center gap-2.5 min-w-0 mb-4">
+            <span className="w-0.5 h-6 rounded-full bg-gradient-to-b from-amber-400 to-orange-500 shrink-0" />
+            <div className="min-w-0">
+              <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight flex items-center gap-1.5">
+                <span className="text-lg">⭐</span>
+                <span className="truncate">Featured Products</span>
+              </h2>
             </div>
-            <Link
-              href="/products"
-              className="text-[11px] md:text-xs font-semibold text-blue-600 hover:text-blue-700 whitespace-nowrap flex items-center gap-1 group/link"
-            >
-              View all
-              <span className="transition-transform group-hover/link:translate-x-0.5">
-                →
-              </span>
-            </Link>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 md:gap-3">
@@ -294,7 +240,7 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ═══════════ MID BANNERS ═══════════ */}
+      {/* ═══════════ MID BANNERS (lazy-loaded, no priority) ═══════════ */}
       {activeMidBanners.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 py-3">
           <div
@@ -308,15 +254,18 @@ export default async function HomePage() {
                 href={b.link || "#"}
                 className="block rounded-xl overflow-hidden hover:shadow-xl transition-all group relative"
               >
-                <div className="relative">
-                  <img
+                <div className="relative w-full h-36 md:h-44 bg-gray-100">
+                  <Image
                     src={b.imageUrl}
-                    alt={b.title}
-                    className="w-full h-36 md:h-44 object-cover group-hover:scale-105 transition-transform duration-700"
+                    alt={b.title || "Banner"}
+                    fill
+                    sizes="(max-width: 768px) 100vw, 50vw"
+                    // NO priority here → lazy-loaded by next/image
+                    className="object-cover group-hover:scale-105 transition-transform duration-700"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent pointer-events-none" />
                   {(b.title || b.subtitle) && (
-                    <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
+                    <div className="absolute inset-0 flex flex-col justify-end p-4 text-white pointer-events-none">
                       {b.title && (
                         <h3 className="text-base md:text-lg font-bold tracking-tight">
                           {b.title}
@@ -342,25 +291,14 @@ export default async function HomePage() {
       {/* ═══════════ MOST SELLING ═══════════ */}
       {mostSellingProducts.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 py-10 md:py-14">
-          <div className="flex items-end justify-between gap-4 mb-4">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="w-0.5 h-6 rounded-full bg-gradient-to-b from-red-400 to-rose-600 shrink-0" />
-              <div className="min-w-0">
-                <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight flex items-center gap-1.5">
-                  <span className="text-lg">🔥</span>
-                  <span className="truncate">Most Selling</span>
-                </h2>
-              </div>
+          <div className="flex items-center gap-2.5 min-w-0 mb-4">
+            <span className="w-0.5 h-6 rounded-full bg-gradient-to-b from-red-400 to-rose-600 shrink-0" />
+            <div className="min-w-0">
+              <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight flex items-center gap-1.5">
+                <span className="text-lg">🔥</span>
+                <span className="truncate">Most Selling</span>
+              </h2>
             </div>
-            <Link
-              href="/products"
-              className="text-[11px] md:text-xs font-semibold text-blue-600 hover:text-blue-700 whitespace-nowrap flex items-center gap-1 group/link"
-            >
-              View all
-              <span className="transition-transform group-hover/link:translate-x-0.5">
-                →
-              </span>
-            </Link>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 md:gap-3">
@@ -377,30 +315,19 @@ export default async function HomePage() {
           key={group.slug}
           className="max-w-7xl mx-auto px-4 py-10 md:py-14 border-t border-gray-100"
         >
-          <div className="flex items-end justify-between gap-4 mb-4">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="w-0.5 h-6 rounded-full bg-gradient-to-b from-blue-500 to-indigo-600 shrink-0" />
-              <div className="min-w-0">
-                <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight flex items-center gap-1.5">
-                  <span className="text-lg">
-                    {iconFor(group.slug, group.name)}
-                  </span>
-                  <span className="truncate">{group.name}</span>
-                </h2>
-                <p className="text-[10px] text-gray-400 mt-0.5">
-                  Handpicked selections
-                </p>
-              </div>
+          <div className="flex items-center gap-2.5 min-w-0 mb-4">
+            <span className="w-0.5 h-6 rounded-full bg-gradient-to-b from-blue-500 to-indigo-600 shrink-0" />
+            <div className="min-w-0">
+              <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight flex items-center gap-1.5">
+                <span className="text-lg">
+                  {iconFor(group.slug, group.name)}
+                </span>
+                <span className="truncate">{group.name}</span>
+              </h2>
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                Handpicked selections
+              </p>
             </div>
-            <Link
-              href={`/products?category=${group.slug}`}
-              className="text-[11px] md:text-xs font-semibold text-blue-600 hover:text-blue-700 whitespace-nowrap flex items-center gap-1 group/link"
-            >
-              View all
-              <span className="transition-transform group-hover/link:translate-x-0.5">
-                →
-              </span>
-            </Link>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 md:gap-3">
             {group.products.slice(0, 10).map((p) => (

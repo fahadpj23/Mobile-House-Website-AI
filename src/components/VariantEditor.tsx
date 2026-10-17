@@ -276,14 +276,14 @@ export default function VariantEditor({
 
       {enabled && (
         <>
-          {/* ★ OPTIONS — EVERYTHING ON ONE ROW */}
+          {/* ★ OPTIONS */}
           <div className="space-y-3">
             {options.map((opt, oi) => (
               <div
                 key={opt.id}
-                className="border rounded-lg bg-gray-50 p-2.5 flex items-start gap-2"
+                className="border rounded-lg bg-gray-50 p-3 flex items-start gap-3"
               >
-                {/* Fixed-width left block: name + type */}
+                {/* Left: name + type */}
                 <div className="flex items-center gap-2 shrink-0">
                   <input
                     className="input py-1.5 text-sm"
@@ -307,85 +307,105 @@ export default function VariantEditor({
                   </select>
                 </div>
 
-                {/* Middle: all values inline */}
-                <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+                {/* Middle: values */}
+                <div className="flex flex-wrap items-start gap-3 flex-1 min-w-0">
                   {opt.values.map((val, vi) => {
                     const uploading = uploadingKey === `${oi}-${vi}`;
                     const imgs = val.images || [];
                     return (
                       <div
                         key={val.id}
-                        className="flex items-center gap-1 bg-white border border-gray-200 rounded px-1.5 py-1"
+                        className="flex flex-col gap-2 bg-white border border-gray-200 rounded-lg p-2.5 min-w-[140px]"
                       >
-                        {/* Color swatch (color type only) */}
-                        {opt.type === "color" && (
+                        {/* Row 1: color swatch + label + remove */}
+                        <div className="flex items-center gap-2">
+                          {opt.type === "color" && (
+                            <input
+                              type="color"
+                              value={val.colorHex || "#000000"}
+                              onChange={(e) =>
+                                updateValue(oi, vi, {
+                                  colorHex: e.target.value,
+                                })
+                              }
+                              className="w-7 h-7 rounded cursor-pointer border p-0 shrink-0"
+                              title="Pick color"
+                            />
+                          )}
+
                           <input
-                            type="color"
-                            value={val.colorHex || "#000000"}
+                            value={val.label}
                             onChange={(e) =>
-                              updateValue(oi, vi, {
-                                colorHex: e.target.value,
-                              })
+                              updateValue(oi, vi, { label: e.target.value })
                             }
-                            className="w-5 h-5 rounded cursor-pointer border p-0 shrink-0"
-                            title="Pick color"
+                            className="text-sm outline-none bg-transparent flex-1 min-w-0 font-medium"
+                            placeholder="Value"
                           />
-                        )}
 
-                        {/* Value label */}
-                        <input
-                          value={val.label}
-                          onChange={(e) =>
-                            updateValue(oi, vi, { label: e.target.value })
-                          }
-                          className="text-sm outline-none bg-transparent"
-                          placeholder="Value"
-                          style={{
-                            width: `${Math.max(
-                              50,
-                              val.label.length * 8 + 16,
-                            )}px`,
-                          }}
-                        />
+                          <button
+                            type="button"
+                            onClick={() => removeValue(oi, vi)}
+                            className="text-gray-400 hover:text-red-500 shrink-0 p-0.5"
+                            title="Remove value"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
 
-                        {/* Inline thumbnails (color type only) */}
+                        {/* Row 2: image thumbnails + big upload tile (color only) */}
                         {opt.type === "color" && (
-                          <>
+                          <div className="flex flex-wrap items-start gap-2">
                             {imgs.map((url, imgIdx) => (
                               <div
                                 key={imgIdx}
-                                className="relative group w-6 h-6 rounded overflow-hidden border bg-gray-50 shrink-0"
-                                title={imgIdx === 0 ? "Main image" : "Image"}
+                                className="relative group w-16 h-16 rounded-lg overflow-hidden border border-gray-200 bg-gray-50 shrink-0"
                               >
                                 <img
                                   src={url}
                                   alt=""
                                   className="w-full h-full object-cover"
                                 />
+
+                                {/* Main badge on first image */}
+                                {imgIdx === 0 && (
+                                  <span className="absolute top-1 left-1 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+                                    Main
+                                  </span>
+                                )}
+
+                                {/* Remove button */}
                                 <button
                                   type="button"
                                   onClick={() =>
                                     removeColorImage(oi, vi, imgIdx)
                                   }
-                                  className="absolute -top-0.5 -right-0.5 bg-red-600 text-white rounded-full p-[1px] opacity-0 group-hover:opacity-100 transition"
+                                  className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow-md transition"
+                                  title="Remove image"
                                 >
-                                  <X size={7} />
+                                  <X size={11} />
                                 </button>
                               </div>
                             ))}
+
+                            {/* Big upload tile */}
                             <label
-                              className={`w-6 h-6 rounded border border-dashed border-gray-300 hover:border-blue-500 flex items-center justify-center cursor-pointer bg-gray-50 shrink-0 ${
-                                uploading ? "opacity-60" : ""
+                              className={`w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50 flex flex-col items-center justify-center cursor-pointer bg-gray-50 shrink-0 transition-colors ${
+                                uploading ? "opacity-60 cursor-wait" : ""
                               }`}
                               title="Upload image(s)"
                             >
                               {uploading ? (
                                 <Loader2
-                                  size={10}
+                                  size={20}
                                   className="animate-spin text-blue-600"
                                 />
                               ) : (
-                                <Upload size={10} className="text-gray-400" />
+                                <>
+                                  <Upload size={18} className="text-gray-400" />
+                                  <span className="text-[9px] text-gray-500 mt-0.5 font-medium">
+                                    Upload
+                                  </span>
+                                </>
                               )}
                               <input
                                 type="file"
@@ -403,18 +423,8 @@ export default function VariantEditor({
                                 }}
                               />
                             </label>
-                          </>
+                          </div>
                         )}
-
-                        {/* Remove value */}
-                        <button
-                          type="button"
-                          onClick={() => removeValue(oi, vi)}
-                          className="text-gray-400 hover:text-red-500 shrink-0"
-                          title="Remove value"
-                        >
-                          <X size={11} />
-                        </button>
                       </div>
                     );
                   })}
@@ -423,7 +433,7 @@ export default function VariantEditor({
                   <AddValueInput onAdd={(label) => addValue(oi, label)} />
                 </div>
 
-                {/* Fixed-width right block: remove option */}
+                {/* Right: remove option */}
                 <button
                   type="button"
                   onClick={() => removeOption(oi)}
@@ -535,11 +545,11 @@ export default function VariantEditor({
                                   <img
                                     src={val.images[0]}
                                     alt={val.label}
-                                    className="w-7 h-7 rounded object-cover border border-gray-200"
+                                    className="w-9 h-9 rounded object-cover border border-gray-200"
                                   />
                                 )}
                                 {isColor && !val?.images?.[0] && (
-                                  <span className="w-3.5 h-3.5 rounded-full border border-gray-300 bg-gray-100" />
+                                  <span className="w-4 h-4 rounded-full border border-gray-300 bg-gray-100" />
                                 )}
                                 <span>{val?.label || "?"}</span>
                                 {isColor && (val?.images?.length || 0) > 1 && (
@@ -649,9 +659,9 @@ function AddValueInput({ onAdd }: { onAdd: (v: string) => void }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1 text-xs text-blue-600 border border-dashed border-blue-400 rounded px-2 py-1 hover:bg-blue-50 shrink-0"
+        className="flex items-center gap-1 text-xs text-blue-600 border border-dashed border-blue-400 rounded px-3 py-2 hover:bg-blue-50 shrink-0 self-start"
       >
-        <Plus size={11} /> Add value
+        <Plus size={12} /> Add value
       </button>
     );
   }
@@ -665,7 +675,7 @@ function AddValueInput({ onAdd }: { onAdd: (v: string) => void }) {
   };
 
   return (
-    <div className="flex items-center gap-1 bg-white border border-blue-400 rounded px-1.5 py-1 shadow-sm shrink-0">
+    <div className="flex items-center gap-1 bg-white border border-blue-400 rounded px-2 py-2 shadow-sm shrink-0 self-start">
       <input
         autoFocus
         placeholder="e.g. 4GB"
@@ -682,7 +692,7 @@ function AddValueInput({ onAdd }: { onAdd: (v: string) => void }) {
           }
         }}
         onBlur={commit}
-        className="w-20 text-sm outline-none bg-transparent"
+        className="w-24 text-sm outline-none bg-transparent"
       />
     </div>
   );

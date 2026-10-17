@@ -1,6 +1,7 @@
 // CustomerNavbar.tsx
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useCart } from "./CartProvider";
@@ -9,7 +10,6 @@ import {
   ShoppingCart,
   User as UserIcon,
   Search,
-  Menu,
   X,
   Loader2,
   Layers,
@@ -31,7 +31,7 @@ function CustomerBar() {
   const router = useRouter();
 
   const [q, setQ] = useState("");
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
 
   // ── Live search state ──
   const [results, setResults] = useState<{
@@ -44,6 +44,7 @@ function CustomerBar() {
   const [searching, setSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null); // 👈 NEW: to blur after submit
 
   const debouncedQ = useDebounce(q, 250);
 
@@ -95,304 +96,331 @@ function CustomerBar() {
     };
   }, [debouncedQ]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (q.trim()) {
-      setShowDropdown(false);
-      router.push(`/products?q=${encodeURIComponent(q.trim())}`);
-    }
-  };
-
-  const handleResultClick = () => {
-    setShowDropdown(false);
-    setQ("");
-  };
-
   const clearSearch = () => {
     setQ("");
     setShowDropdown(false);
+  };
+
+  /* 👇 NEW: submit → navigate → clear input */
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const term = q.trim();
+    if (!term) return;
+
+    // Navigate first
+    router.push(`/products?q=${encodeURIComponent(term)}`);
+
+    // Then clear the input + close dropdown
+    clearSearch();
+    setResults({ products: [], series: [] });
+    setSearching(false);
+
+    // Blur the input so the focus ring disappears
+    inputRef.current?.blur();
+    setFocused(false);
+  };
+
+  /* 👇 Click a suggestion → navigate → clear */
+  const handleResultClick = () => {
+    clearSearch();
+    setResults({ products: [], series: [] });
+    setSearching(false);
+    inputRef.current?.blur();
+    setFocused(false);
   };
 
   const count = items.reduce((s, i) => s + i.quantity, 0);
 
   const hasResults = results.products.length > 0 || results.series.length > 0;
 
-  return (
-    <header className="bg-white border-b sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4">
-        {/* Mobile menu toggle */}
-        <button
-          className="md:hidden"
-          onClick={() => setMobileOpen((o) => !o)}
-          aria-label="Menu"
-        >
-          <Menu size={20} />
-        </button>
-
-        {/* Logo */}
-        <Link href="/" className="font-bold text-lg text-blue-600 shrink-0">
-          Mobile_house
-        </Link>
-
-        {/* ── Desktop search with live dropdown ── */}
-        <div
-          ref={dropdownRef}
-          className="hidden md:block flex-1 max-w-xl relative"
-        >
-          <form onSubmit={handleSearch} className="relative">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onFocus={() => q.trim() && setShowDropdown(true)}
-              placeholder="Search products..."
-              className="input"
-              style={{ paddingLeft: "2.5rem", paddingRight: "2.5rem" }}
-              autoComplete="off"
-            />
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-            />
-            {searching && (
-              <Loader2
-                size={14}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-500 animate-spin pointer-events-none"
-              />
-            )}
-            {!searching && q && (
-              <button
-                type="button"
-                onClick={clearSearch}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
-                aria-label="Clear search"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </form>
-
-          {/* Live search dropdown */}
-          {showDropdown && q.trim() && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-[70vh] overflow-y-auto z-50">
-              {searching && !hasResults ? (
-                <div className="p-4 flex items-center gap-2 text-sm text-gray-500">
-                  <Loader2 size={14} className="animate-spin" />
-                  Searching...
-                </div>
-              ) : !hasResults ? (
-                <div className="p-4 text-sm text-gray-500">
-                  No results for &quot;{q}&quot;
-                  <button
-                    onClick={handleSearch}
-                    className="block mt-2 text-blue-600 hover:underline text-xs"
-                  >
-                    Search all products →
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {/* Series matches */}
-                  {results.series.length > 0 && (
-                    <div className="border-b">
-                      <p className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">
-                        Series
-                      </p>
-                      {results.series.map((s) => (
-                        <Link
-                          key={s.id}
-                          href={`/products?series=${encodeURIComponent(s.slug)}`}
-                          onClick={handleResultClick}
-                          className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 transition"
-                        >
-                          <Layers
-                            size={14}
-                            className="text-blue-500 shrink-0"
-                          />
-                          <span className="text-sm font-medium">{s.name}</span>
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Product matches */}
-                  {results.products.length > 0 && (
-                    <div>
-                      <p className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">
-                        Products
-                      </p>
-                      {results.products.map((p) => (
-                        <Link
-                          key={p.id}
-                          href={`/products/${p.id}`}
-                          onClick={handleResultClick}
-                          className="flex items-center gap-3 px-3 py-2 hover:bg-blue-50 transition"
-                        >
-                          <img
-                            src={productThumb(p)}
-                            alt={p.name}
-                            className="w-10 h-10 rounded object-cover border bg-gray-50 shrink-0"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium line-clamp-1">
-                              {p.name}
-                            </p>
-                            <p className="text-[11px] text-gray-500 line-clamp-1">
-                              {p.brand}
-                              {p.seriesName ? ` • ${p.seriesName}` : ""}
-                            </p>
-                          </div>
-                          <span className="text-sm font-bold text-blue-600 shrink-0">
-                            ₹{p.price}
-                          </span>
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Footer */}
-                  <button
-                    onClick={handleSearch}
-                    className="w-full text-left px-3 py-2.5 text-xs text-blue-600 hover:bg-blue-50 border-t font-medium flex items-center gap-1"
-                  >
-                    <Search size={12} />
-                    View all results for &quot;{q}&quot;
-                  </button>
-                </>
-              )}
-            </div>
-          )}
+  /* ══════════════════════════════════════════════════════════
+     SEARCH BOX
+     ══════════════════════════════════════════════════════════ */
+  const SearchBox = (
+    <div ref={dropdownRef} className="w-full relative">
+      <form onSubmit={handleSearch} className="relative">
+        {/* Search icon — left */}
+        <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
+          <Search
+            size={18}
+            className={`transition-colors duration-200 ${
+              focused ? "text-blue-500" : "text-gray-400"
+            }`}
+          />
         </div>
 
-        {/* Right nav */}
-        <nav className="ml-auto flex items-center gap-4">
-          <Link
-            href="/products"
-            className="hidden md:inline text-sm hover:text-blue-600"
+        {/* Input */}
+        <input
+          ref={inputRef}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onFocus={() => {
+            setFocused(true);
+            if (q.trim()) setShowDropdown(true);
+          }}
+          onBlur={() => setFocused(false)}
+          placeholder="Search phones, accessories, brands..."
+          className={`w-full h-11 pl-12 pr-12 text-sm rounded-full bg-gray-100 border transition-all duration-200 outline-none placeholder:text-gray-400 ${
+            focused
+              ? "bg-white border-blue-400 ring-4 ring-blue-100 shadow-sm"
+              : "border-transparent hover:bg-gray-150 hover:bg-gray-200/70"
+          }`}
+          autoComplete="off"
+        />
+
+        {/* Right side: spinner or clear button */}
+        {searching && (
+          <Loader2
+            size={16}
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-500 animate-spin pointer-events-none"
+          />
+        )}
+        {!searching && q && (
+          <button
+            type="button"
+            onClick={clearSearch}
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 flex items-center justify-center transition-colors"
+            aria-label="Clear search"
           >
-            Shop
-          </Link>
+            <X size={13} />
+          </button>
+        )}
+      </form>
 
-          <Link href="/cart" className="relative">
-            <ShoppingCart size={20} />
-            {count > 0 && (
-              <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
-                {count}
-              </span>
-            )}
-          </Link>
-
-          {user ? (
-            <div className="relative group">
-              <button className="flex items-center gap-1 text-sm">
-                <UserIcon size={18} />
-                <span className="hidden md:inline">
-                  {user.displayName || user.email?.split("@")[0]}
+      {/* Live search dropdown */}
+      {showDropdown && q.trim() && (
+        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-100 rounded-2xl shadow-2xl max-h-[70vh] overflow-y-auto z-50 overflow-hidden">
+          {searching && !hasResults ? (
+            <div className="p-5 flex items-center gap-2.5 text-sm text-gray-500">
+              <Loader2 size={16} className="animate-spin text-blue-500" />
+              Searching...
+            </div>
+          ) : !hasResults ? (
+            <div className="p-5 text-sm text-gray-500">
+              <p>
+                No results for{" "}
+                <span className="font-semibold text-gray-700">
+                  &quot;{q}&quot;
                 </span>
+              </p>
+              <button
+                onClick={handleSearch}
+                className="mt-2 text-blue-600 hover:text-blue-700 hover:underline text-xs font-medium"
+              >
+                Search all products →
               </button>
-              <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg hidden group-hover:block min-w-[140px]">
-                <Link
-                  href="/orders"
-                  className="block px-3 py-2 text-sm hover:bg-gray-50"
-                >
-                  My Orders
-                </Link>
-                <button
-                  onClick={logout}
-                  className="block w-full text-left px-3 py-2 text-sm text-red-500 hover:bg-gray-50"
-                >
-                  Logout
-                </button>
-              </div>
             </div>
           ) : (
-            <Link href="/auth/login" className="text-sm hover:text-blue-600">
-              Login
-            </Link>
-          )}
-        </nav>
-      </div>
-
-      {/* ── Mobile search + live dropdown ── */}
-      {mobileOpen && (
-        <div className="md:hidden border-t px-4 py-2 relative">
-          <form onSubmit={handleSearch} className="relative">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search..."
-              className="input"
-              style={{ paddingLeft: "2.5rem", paddingRight: "2.5rem" }}
-              autoComplete="off"
-            />
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-            />
-            {searching && (
-              <Loader2
-                size={14}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-500 animate-spin pointer-events-none"
-              />
-            )}
-            {!searching && q && (
-              <button
-                type="button"
-                onClick={clearSearch}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
-                aria-label="Clear search"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </form>
-
-          {/* Mobile dropdown results */}
-          {q.trim() && (
-            <div className="mt-1 bg-white border rounded-lg shadow-lg max-h-[60vh] overflow-y-auto">
-              {!hasResults ? (
-                <div className="p-3 text-sm text-gray-500">
-                  No results for &quot;{q}&quot;
-                </div>
-              ) : (
-                <>
+            <>
+              {/* Series matches */}
+              {results.series.length > 0 && (
+                <div className="border-b border-gray-100">
+                  <p className="px-4 pt-3 pb-1.5 text-[10px] uppercase tracking-wider text-gray-400 font-semibold">
+                    Series
+                  </p>
                   {results.series.map((s) => (
                     <Link
                       key={s.id}
                       href={`/products?series=${encodeURIComponent(s.slug)}`}
                       onClick={handleResultClick}
-                      className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 border-b"
+                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-blue-50/70 transition-colors"
                     >
-                      <Layers size={14} className="text-blue-500" />
-                      <span className="text-sm font-medium">{s.name}</span>
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                        <Layers size={14} className="text-blue-500" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-800">
+                        {s.name}
+                      </span>
                     </Link>
                   ))}
+                </div>
+              )}
+
+              {/* Product matches */}
+              {results.products.length > 0 && (
+                <div>
+                  <p className="px-4 pt-3 pb-1.5 text-[10px] uppercase tracking-wider text-gray-400 font-semibold">
+                    Products
+                  </p>
                   {results.products.map((p) => (
                     <Link
                       key={p.id}
                       href={`/products/${p.id}`}
                       onClick={handleResultClick}
-                      className="flex items-center gap-3 px-3 py-2 hover:bg-blue-50 border-b"
+                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-blue-50/70 transition-colors"
                     >
                       <img
                         src={productThumb(p)}
                         alt={p.name}
-                        className="w-9 h-9 rounded object-cover border bg-gray-50 shrink-0"
+                        className="w-11 h-11 rounded-lg object-cover border border-gray-100 bg-gray-50 shrink-0"
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm line-clamp-1">{p.name}</p>
-                        <p className="text-[10px] text-gray-500">{p.brand}</p>
+                        <p className="text-sm font-medium text-gray-800 line-clamp-1">
+                          {p.name}
+                        </p>
+                        <p className="text-[11px] text-gray-500 line-clamp-1 mt-0.5">
+                          {p.brand}
+                          {p.seriesName ? ` • ${p.seriesName}` : ""}
+                        </p>
                       </div>
-                      <span className="text-xs font-bold text-blue-600">
+                      <span className="text-sm font-bold text-blue-600 shrink-0">
                         ₹{p.price}
                       </span>
                     </Link>
                   ))}
-                </>
+                </div>
               )}
-            </div>
+
+              {/* Footer */}
+              <button
+                onClick={handleSearch}
+                className="w-full text-left px-4 py-3 text-xs text-blue-600 hover:bg-blue-50/70 border-t border-gray-100 font-semibold flex items-center gap-1.5 transition-colors"
+              >
+                <Search size={13} />
+                View all results for &quot;{q}&quot;
+              </button>
+            </>
           )}
         </div>
       )}
+    </div>
+  );
+
+  return (
+    <header className="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        {/* ════════════ DESKTOP (md and up) ════════════ */}
+        <div className="hidden md:flex items-center justify-between gap-6 py-3">
+          {/* LEFT — Logo */}
+          <Link href="/" className="flex items-center shrink-0 group">
+            <Image
+              src="/mobileHouseLogo.png"
+              alt="Mobile House"
+              width={200}
+              height={56}
+              priority
+              className="h-10 lg:h-11 w-auto object-contain transition-transform duration-200 group-hover:scale-[1.02]"
+            />
+          </Link>
+
+          {/* CENTER — Search */}
+          <div className="flex-1 max-w-2xl">{SearchBox}</div>
+
+          {/* RIGHT — Profile + Cart */}
+          <div className="flex items-center gap-2 shrink-0">
+            {user ? (
+              <div className="relative group">
+                <button className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-full hover:bg-gray-100 transition-colors">
+                  <UserIcon size={20} />
+                  <span className="hidden lg:inline max-w-[110px] truncate font-medium">
+                    {user.displayName || user.email?.split("@")[0]}
+                  </span>
+                </button>
+                <div className="absolute right-0 mt-2 bg-white border border-gray-100 rounded-xl shadow-xl hidden group-hover:block min-w-[160px] z-50 overflow-hidden">
+                  <Link
+                    href="/orders"
+                    className="block px-4 py-2.5 text-sm hover:bg-gray-50"
+                  >
+                    My Orders
+                  </Link>
+                  <button
+                    onClick={logout}
+                    className="block w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 border-t border-gray-100"
+                  >
+                    Logout
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <Link
+                href="/auth/login"
+                className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-full hover:bg-gray-100 transition-colors font-medium"
+              >
+                <UserIcon size={20} />
+                <span>Login</span>
+              </Link>
+            )}
+
+            <Link
+              href="/cart"
+              className="relative p-2.5 rounded-full hover:bg-gray-100 transition-colors"
+              aria-label="Cart"
+            >
+              <ShoppingCart size={22} />
+              {count > 0 && (
+                <span className="absolute top-0.5 right-0.5 bg-blue-600 text-white text-[10px] font-semibold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center ring-2 ring-white">
+                  {count > 99 ? "99+" : count}
+                </span>
+              )}
+            </Link>
+          </div>
+        </div>
+
+        {/* ════════════ MOBILE (below md) ════════════ */}
+        <div className="md:hidden py-3">
+          {/* Row 1: Logo — Cart & Profile */}
+          <div className="flex items-center justify-between gap-3">
+            <Link href="/" className="flex items-center shrink-0">
+              <Image
+                src="/mobileHouseLogo.png"
+                alt="Mobile House"
+                width={170}
+                height={48}
+                priority
+                className="h-9 w-auto object-contain"
+              />
+            </Link>
+
+            <div className="flex items-center gap-1.5">
+              {user ? (
+                <div className="relative group">
+                  <button className="p-2 rounded-full hover:bg-gray-100 transition-colors">
+                    <UserIcon size={22} />
+                  </button>
+                  <div className="absolute right-0 mt-2 bg-white border border-gray-100 rounded-xl shadow-xl hidden group-hover:block min-w-[160px] z-50 overflow-hidden">
+                    <Link
+                      href="/orders"
+                      className="block px-4 py-2.5 text-sm hover:bg-gray-50"
+                    >
+                      My Orders
+                    </Link>
+                    <button
+                      onClick={logout}
+                      className="block w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 border-t border-gray-100"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <Link
+                  href="/auth/login"
+                  className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+                  aria-label="Login"
+                >
+                  <UserIcon size={22} />
+                </Link>
+              )}
+
+              <Link
+                href="/cart"
+                className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
+                aria-label="Cart"
+              >
+                <ShoppingCart size={22} />
+                {count > 0 && (
+                  <span className="absolute top-0.5 right-0.5 bg-blue-600 text-white text-[10px] font-semibold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center ring-2 ring-white">
+                    {count > 99 ? "99+" : count}
+                  </span>
+                )}
+              </Link>
+            </div>
+          </div>
+
+          {/* Row 2: Search bar below */}
+          <div className="mt-3">{SearchBox}</div>
+        </div>
+      </div>
     </header>
   );
 }

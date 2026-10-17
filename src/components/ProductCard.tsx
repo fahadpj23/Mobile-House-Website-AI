@@ -1,6 +1,7 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image"; // 👈 IMPORT NEXT IMAGE
 import { Product, ProductVariant } from "@/lib/types";
 import { useCart } from "./CartProvider";
 import toast from "react-hot-toast";
@@ -11,6 +12,9 @@ export default function ProductCard({
   product: Product | null | undefined;
 }) {
   const { addItem } = useCart();
+
+  // Track whether the image finished loading (for fade-in)
+  const [imgLoaded, setImgLoaded] = useState(false);
 
   if (!product || !product.id) return null;
 
@@ -62,7 +66,7 @@ export default function ProductCard({
     ? !firstVariant.enabled || firstVariant.stock <= 0
     : product.stock <= 0;
 
-  /* ───────── Variant suffix — same logic as ProductDetailClient ───────── */
+  /* ───────── Variant suffix ───────── */
   const variantSuffix = useMemo(() => {
     if (!hasVariants || !firstVariant) return "";
 
@@ -153,20 +157,26 @@ export default function ProductCard({
         className="relative block bg-gradient-to-br from-gray-50 to-white p-2"
       >
         <div className="relative aspect-square rounded-md overflow-hidden bg-white">
-          <img
+          {/* 👇 NEXT/IMAGE: Automatically lazy loads & optimizes size */}
+          <Image
             src={displayImage}
             alt={displayName}
-            className="absolute inset-0 w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+            onLoad={() => setImgLoaded(true)}
+            className={`object-contain transition-all duration-300 group-hover:scale-105 ${
+              imgLoaded ? "opacity-100" : "opacity-0"
+            }`}
           />
 
           {hasDiscount && (
-            <span className="absolute top-1.5 left-1.5 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm">
+            <span className="absolute top-1.5 left-1.5 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm z-10">
               -{discountPct}%
             </span>
           )}
 
           {outOfStock && (
-            <span className="absolute top-1.5 right-1.5 bg-gray-800/90 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded">
+            <span className="absolute top-1.5 right-1.5 bg-gray-800/90 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded z-10">
               Out
             </span>
           )}

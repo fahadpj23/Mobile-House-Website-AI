@@ -1,66 +1,114 @@
 // components/BannerCarousel.tsx
 "use client";
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Banner } from "@/lib/types";
+import type { Banner } from "@/lib/types";
+
+const AUTOPLAY_MS = 5000;
 
 export default function BannerCarousel({ banners }: { banners: Banner[] }) {
   const [current, setCurrent] = useState(0);
   const [loadedMap, setLoadedMap] = useState<Record<string, boolean>>({});
+  const [failedMap, setFailedMap] = useState<Record<string, boolean>>({});
+  const imgRef = useRef<HTMLImageElement | null>(null);
 
+  // Keep index valid if banners shrink
   useEffect(() => {
-    if (banners.length <= 1) return;
-    const timer = setInterval(() => {
-      setCurrent((c) => (c + 1) % banners.length);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [banners.length]);
-
-  useEffect(() => {
+    if (banners.length === 0) return;
     if (current >= banners.length) setCurrent(0);
   }, [banners.length, current]);
 
-  // Preload next banner in background for instant transitions
+  const markLoaded = useCallback((url: string) => {
+    if (!url) return;
+    setLoadedMap((m) => (m[url] ? m : { ...m, [url]: true }));
+  }, []);
+
+  const markFailed = useCallback((url: string) => {
+    if (!url) return;
+    setFailedMap((m) => (m[url] ? m : { ...m, [url]: true }));
+    setLoadedMap((m) => (m[url] ? m : { ...m, [url]: true }));
+  }, []);
+
+  // Background preload for slides 2..N — after mount, so it never
+  // competes with first-paint network requests.
   useEffect(() => {
     if (banners.length <= 1) return;
-    const next = banners[(current + 1) % banners.length];
-    if (!next?.imageUrl || loadedMap[next.imageUrl]) return;
 
-    const img = new Image();
-    img.src = next.imageUrl;
-    img.onload = () => setLoadedMap((m) => ({ ...m, [next.imageUrl]: true }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current, banners]);
+    const timer = window.setTimeout(() => {
+      banners.slice(1).forEach((b) => {
+        const url = b.imageUrl;
+        if (!url) return;
+        if (loadedMap[url] || failedMap[url]) return;
+
+        const img = new window.Image();
+        img.src = url;
+        img.onload = () => markLoaded(url);
+        img.onerror = () => markFailed(url);
+      });
+    }, 1200); // delay so hero #1 wins the network race
+
+    return () => window.clearTimeout(timer);
+  }, [banners, loadedMap, failedMap, markLoaded, markFailed]);
+
+  // Recover from missed onLoad (cache / hydration race)
+  useEffect(() => {
+    const img = imgRef.current;
+    const url = banners[current]?.imageUrl;
+    if (!img || !url) return;
+    if (img.complete && img.naturalWidth > 0) markLoaded(url);
+  }, [current, banners, markLoaded]);
+
+  // Autoplay only once current banner is ready
+  useEffect(() => {
+    if (banners.length <= 1) return;
+    const url = banners[current]?.imageUrl;
+    if (!url || !loadedMap[url] || failedMap[url]) return;
+
+    const t = window.setTimeout(() => {
+      setCurrent((c) => (c + 1) % banners.length);
+    }, AUTOPLAY_MS);
+
+    return () => window.clearTimeout(t);
+  }, [current, banners, loadedMap, failedMap]);
+
+  const normalizedImageUrl = useMemo(() => {
+    const url = banners[current]?.imageUrl?.trim();
+    if (!url) return "";
+    if (/^https?:\/\//i.test(url)) return url;
+    return url.startsWith("/") ? url : `/${url}`;
+  }, [banners, current]);
 
   if (banners.length === 0) return null;
 
   const banner = banners[current];
-  const isLoaded = loadedMap[banner.imageUrl];
+  const hasImage = Boolean(normalizedImageUrl);
+  const isLoaded = hasImage ? Boolean(loadedMap[normalizedImageUrl]) : true;
+  const isFailed = hasImage ? Boolean(failedMap[normalizedImageUrl]) : true;
+
+  const goPrev = () =>
+    setCurrent((c) => (c - 1 + banners.length) % banners.length);
+  const goNext = () => setCurrent((c) => (c + 1) % banners.length);
 
   return (
     <section
       className="
         relative w-full overflow-hidden bg-gray-100
-        h-[160px]
-        sm:h-[220px]
-        md:h-[280px]
-        lg:h-[340px]
-        xl:h-[400px]
-        2xl:h-[420px]
+        h-[160px] sm:h-[220px] md:h-[280px] lg:h-[340px] xl:h-[400px] 2xl:h-[420px]
       "
     >
-      <Link href={banner.link || "#"} className="block w-full h-full relative">
-        {/* ── Skeleton shimmer — visible until image loads ── */}
+      <Link
+        href={banner.link || "#"}
+        className="block w-full h-full relative"
+        aria-label={banner.title || "Banner"}
+      >
+        {/* Skeleton shimmer */}
         {!isLoaded && (
           <div className="absolute inset-0 overflow-hidden bg-gray-200">
-            {/* Base gradient tint */}
             <div className="absolute inset-0 bg-gradient-to-br from-gray-200 via-gray-100 to-gray-200" />
-
-            {/* Sweeping shine */}
             <div className="absolute inset-0 -translate-x-full animate-[bannerShimmer_1.6s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/70 to-transparent" />
-
-            {/* Optional skeleton "content" blocks to mimic banner layout */}
             <div className="absolute inset-0 flex flex-col justify-end p-4 md:p-8 gap-2">
               <div className="h-4 md:h-6 w-1/3 rounded bg-gray-300/80" />
               <div className="h-2 md:h-3 w-2/3 rounded bg-gray-300/60" />
@@ -68,33 +116,40 @@ export default function BannerCarousel({ banners }: { banners: Banner[] }) {
           </div>
         )}
 
-        {/* ── Banner image — stretch to fill ── */}
-        <img
-          key={banner.imageUrl}
-          src={banner.imageUrl}
-          alt={banner.title || "Banner"}
-          className={`w-full h-full object-fill transition-opacity duration-500 ${
-            isLoaded ? "opacity-100" : "opacity-0"
-          }`}
-          loading={current === 0 ? "eager" : "lazy"}
-          onLoad={() =>
-            setLoadedMap((m) => ({ ...m, [banner.imageUrl]: true }))
-          }
-          onError={() =>
-            setLoadedMap((m) => ({ ...m, [banner.imageUrl]: true }))
-          }
-        />
+        {/* Image — object-fill stretches to container */}
+        {isFailed || !hasImage ? (
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-300 to-gray-400" />
+        ) : (
+          <Image
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ref={imgRef as any}
+            key={normalizedImageUrl}
+            src={normalizedImageUrl}
+            alt={banner.title || "Banner"}
+            fill
+            // Only the very first banner loads with priority
+            priority={current === 0}
+            // All other slides lazy-load via next/image default
+            loading={current === 0 ? "eager" : "lazy"}
+            sizes="100vw"
+            className={`object-fill transition-opacity duration-500 ${
+              isLoaded ? "opacity-100" : "opacity-0"
+            }`}
+            onLoad={() => markLoaded(normalizedImageUrl)}
+            onError={() => markFailed(normalizedImageUrl)}
+          />
+        )}
 
-        {/* Overlay + text — fade in after image loads */}
+        {/* Overlay + text */}
         {(banner.title || banner.subtitle) && (
           <>
             <div
-              className={`absolute inset-0 bg-gradient-to-t from-black/50 via-black/5 to-transparent transition-opacity duration-500 ${
+              className={`pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-black/5 to-transparent transition-opacity duration-500 ${
                 isLoaded ? "opacity-100" : "opacity-0"
               }`}
             />
             <div
-              className={`absolute inset-0 flex flex-col justify-end p-4 md:p-8 text-white transition-opacity duration-500 ${
+              className={`pointer-events-none absolute inset-0 flex flex-col justify-end p-4 md:p-8 text-white transition-opacity duration-500 ${
                 isLoaded ? "opacity-100" : "opacity-0"
               }`}
             >
@@ -113,18 +168,17 @@ export default function BannerCarousel({ banners }: { banners: Banner[] }) {
         )}
       </Link>
 
+      {/* Navigation */}
       {banners.length > 1 && (
         <>
           <button
-            onClick={() =>
-              setCurrent((c) => (c - 1 + banners.length) % banners.length)
-            }
+            type="button"
+            onClick={goPrev}
             aria-label="Previous banner"
             className="
               absolute left-2 md:left-4 top-1/2 -translate-y-1/2
               bg-white/80 hover:bg-white rounded-full
-              p-1.5 md:p-2
-              z-10 shadow-md transition
+              p-1.5 md:p-2 z-10 shadow-md transition
             "
           >
             <ChevronLeft size={20} className="md:hidden" />
@@ -132,13 +186,13 @@ export default function BannerCarousel({ banners }: { banners: Banner[] }) {
           </button>
 
           <button
-            onClick={() => setCurrent((c) => (c + 1) % banners.length)}
+            type="button"
+            onClick={goNext}
             aria-label="Next banner"
             className="
               absolute right-2 md:right-4 top-1/2 -translate-y-1/2
               bg-white/80 hover:bg-white rounded-full
-              p-1.5 md:p-2
-              z-10 shadow-md transition
+              p-1.5 md:p-2 z-10 shadow-md transition
             "
           >
             <ChevronRight size={20} className="md:hidden" />
@@ -146,11 +200,13 @@ export default function BannerCarousel({ banners }: { banners: Banner[] }) {
           </button>
 
           <div className="absolute bottom-2 md:bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 md:gap-2 z-10">
-            {banners.map((_, i) => (
+            {banners.map((b, i) => (
               <button
-                key={i}
+                type="button"
+                key={`${b.imageUrl || "slide"}-${i}`}
                 onClick={() => setCurrent(i)}
                 aria-label={`Go to banner ${i + 1}`}
+                aria-current={i === current}
                 className={`
                   rounded-full transition-all duration-300
                   ${
@@ -165,7 +221,7 @@ export default function BannerCarousel({ banners }: { banners: Banner[] }) {
         </>
       )}
 
-      {/* ── Keyframes for the shimmer (scoped to this component) ── */}
+      {/* Shimmer keyframes */}
       <style jsx>{`
         @keyframes bannerShimmer {
           0% {

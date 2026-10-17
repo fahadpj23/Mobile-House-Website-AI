@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image"; // 👈 added
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useCart } from "./CartProvider";
@@ -72,8 +73,15 @@ function CustomerNavbar() {
         </button>
 
         {/* Logo — always links to home for customers */}
-        <Link href="/" className="font-bold text-lg text-blue-600 shrink-0">
-          Mobile_house
+        <Link href="/" className="flex items-center shrink-0">
+          <Image
+            src="/mobileHouseLogo.png"
+            alt="Mobile House"
+            width={160}
+            height={40}
+            priority
+            className="h-8 md:h-9 w-auto object-contain"
+          />
         </Link>
 
         {/* Search */}
