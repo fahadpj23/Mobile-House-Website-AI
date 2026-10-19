@@ -1,16 +1,12 @@
 // app/page.tsx
 import Link from "next/link";
-import Image from "next/image";
-import {
-  getProducts,
-  getBanners,
-  getSpecialOffers,
-  getMostSellingProducts,
-  getCategories,
-} from "@/lib/firestore";
-import ProductCard from "@/components/ProductCard";
+import { getBanners, getCategories } from "@/lib/firestore";
 import BannerCarousel from "@/components/BannerCarousel";
-import SpecialOffersSection from "@/components/SpecialOffersSection";
+import FeaturedSection from "@/components/FeaturedSection";
+import MidBannersLazy from "@/components/MidBannersLazy";
+import SpecialOffersLazy from "@/components/SpecialOffersLazy";
+import MostSellingSection from "@/components/MostSellingSection";
+import CategorySectionLazy from "@/components/CategorySectionLazy";
 
 export const dynamic = "force-dynamic";
 
@@ -83,20 +79,16 @@ function iconFor(slug: string, name: string): string {
 }
 
 export default async function HomePage() {
-  const [products, heroBanners, midBanners, offers, mostSelling, categories] =
-    await Promise.all([
-      getProducts(),
-      getBanners("hero"),
-      getBanners("mid"),
-      getSpecialOffers(true),
-      getMostSellingProducts(8),
-      getCategories(),
-    ]);
+  // Only fetch what the server truly needs:
+  // hero banners (above the fold) + category list (to decide which lazy sections to render).
+  const [heroBanners, categories] = await Promise.all([
+    getBanners("hero"),
+    getCategories(),
+  ]);
 
   const activeHeroBanners = heroBanners.filter((b) => b.active);
-  const activeMidBanners = midBanners.filter((b) => b.active);
 
-  /* ────────── Category helpers ────────── */
+  /* ────────── Resolve top-level categories for lazy sections ────────── */
   const slugToCat: Record<
     string,
     { name: string; parentSlug?: string; slug: string }
@@ -125,60 +117,23 @@ export default async function HomePage() {
     return curSlug;
   };
 
-  const productTopSlug = (p: (typeof products)[number]): string => {
-    if (p.categoryPath && p.categoryPath.length > 0) {
-      return p.categoryPath[0];
-    }
-    if (p.category) {
-      return topLevelSlugOf(p.category);
-    }
-    return "__other__";
-  };
+  const topSlugs = new Set<string>();
+  categories.forEach((c) => topSlugs.add(topLevelSlugOf(c.slug)));
 
-  /* ────────── Bucket products by top category ────────── */
-  type Bucket = {
-    slug: string;
-    name: string;
-    products: typeof products;
-  };
-
-  const bucketMap: Record<string, Bucket> = {};
-  for (const p of products) {
-    const topSlug = productTopSlug(p);
-    const topName =
-      slugToCat[topSlug]?.name || (topSlug === "__other__" ? "Other" : topSlug);
-
-    if (!bucketMap[topSlug]) {
-      bucketMap[topSlug] = { slug: topSlug, name: topName, products: [] };
-    }
-    bucketMap[topSlug].products.push(p);
-  }
-
-  const buckets: Bucket[] = Object.values(bucketMap).sort((a, b) => {
-    if (a.slug === "__other__") return 1;
-    if (b.slug === "__other__") return -1;
-    return a.name.localeCompare(b.name);
-  });
-
-  /* ────────── Featured ────────── */
-  const featuredProducts = (() => {
-    const flagged = products.filter((p) => p.isFeatured);
-    const source = flagged.length > 0 ? flagged : products;
-    return source.slice(0, 10);
-  })();
-
-  /* ────────── Most Selling ────────── */
-  const mostSellingProducts = (() => {
-    const topIds = new Set(mostSelling.map((p) => p.id));
-    const extras = products
-      .filter((p) => !topIds.has(p.id) && (p.totalSold ?? 0) > 0)
-      .sort((a, b) => (b.totalSold ?? 0) - (a.totalSold ?? 0));
-    return [...mostSelling, ...extras].slice(0, 10);
-  })();
+  const topLevelCategories = Array.from(topSlugs)
+    .map((slug) => ({
+      slug,
+      name: slugToCat[slug]?.name || slug,
+    }))
+    .sort((a, b) => {
+      if (a.slug === "__other__") return 1;
+      if (b.slug === "__other__") return -1;
+      return a.name.localeCompare(b.name);
+    });
 
   return (
     <div className="bg-white">
-      {/* ═══════════ HERO ═══════════ */}
+      {/* ═══════════ HERO (server-rendered, above the fold) ═══════════ */}
       {activeHeroBanners.length > 0 ? (
         <BannerCarousel banners={activeHeroBanners} />
       ) : (
@@ -219,122 +174,26 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ═══════════ FEATURED ═══════════ */}
-      {featuredProducts.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 py-10 md:py-14">
-          <div className="flex items-center gap-2.5 min-w-0 mb-4">
-            <span className="w-0.5 h-6 rounded-full bg-gradient-to-b from-amber-400 to-orange-500 shrink-0" />
-            <div className="min-w-0">
-              <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight flex items-center gap-1.5">
-                <span className="text-lg">⭐</span>
-                <span className="truncate">Featured Products</span>
-              </h2>
-            </div>
-          </div>
+      {/* ═══════════ FEATURED (API fires on scroll) ═══════════ */}
+      <FeaturedSection />
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 md:gap-3">
-            {featuredProducts.map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
-          </div>
-        </section>
-      )}
+      {/* ═══════════ MID BANNERS (API fires on scroll) ═══════════ */}
+      <MidBannersLazy />
 
-      {/* ═══════════ MID BANNERS (lazy-loaded, no priority) ═══════════ */}
-      {activeMidBanners.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 py-3">
-          <div
-            className={`grid gap-3 ${
-              activeMidBanners.length === 1 ? "grid-cols-1" : "md:grid-cols-2"
-            }`}
-          >
-            {activeMidBanners.map((b) => (
-              <Link
-                key={b.id}
-                href={b.link || "#"}
-                className="block rounded-xl overflow-hidden hover:shadow-xl transition-all group relative"
-              >
-                <div className="relative w-full h-36 md:h-44 bg-gray-100">
-                  <Image
-                    src={b.imageUrl}
-                    alt={b.title || "Banner"}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 50vw"
-                    // NO priority here → lazy-loaded by next/image
-                    className="object-cover group-hover:scale-105 transition-transform duration-700"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent pointer-events-none" />
-                  {(b.title || b.subtitle) && (
-                    <div className="absolute inset-0 flex flex-col justify-end p-4 text-white pointer-events-none">
-                      {b.title && (
-                        <h3 className="text-base md:text-lg font-bold tracking-tight">
-                          {b.title}
-                        </h3>
-                      )}
-                      {b.subtitle && (
-                        <p className="text-[11px] text-gray-200 mt-0.5">
-                          {b.subtitle}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
+      {/* ═══════════ SPECIAL OFFERS (API fires on scroll) ═══════════ */}
+      <SpecialOffersLazy />
 
-      {/* ═══════════ SPECIAL OFFERS ═══════════ */}
-      {offers.length > 0 && <SpecialOffersSection offers={offers} />}
+      {/* ═══════════ MOST SELLING (API fires on scroll) ═══════════ */}
+      <MostSellingSection />
 
-      {/* ═══════════ MOST SELLING ═══════════ */}
-      {mostSellingProducts.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 py-10 md:py-14">
-          <div className="flex items-center gap-2.5 min-w-0 mb-4">
-            <span className="w-0.5 h-6 rounded-full bg-gradient-to-b from-red-400 to-rose-600 shrink-0" />
-            <div className="min-w-0">
-              <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight flex items-center gap-1.5">
-                <span className="text-lg">🔥</span>
-                <span className="truncate">Most Selling</span>
-              </h2>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 md:gap-3">
-            {mostSellingProducts.map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ═══════════ CATEGORY FULL LISTINGS ═══════════ */}
-      {buckets.map((group) => (
-        <section
-          key={group.slug}
-          className="max-w-7xl mx-auto px-4 py-10 md:py-14 border-t border-gray-100"
-        >
-          <div className="flex items-center gap-2.5 min-w-0 mb-4">
-            <span className="w-0.5 h-6 rounded-full bg-gradient-to-b from-blue-500 to-indigo-600 shrink-0" />
-            <div className="min-w-0">
-              <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight flex items-center gap-1.5">
-                <span className="text-lg">
-                  {iconFor(group.slug, group.name)}
-                </span>
-                <span className="truncate">{group.name}</span>
-              </h2>
-              <p className="text-[10px] text-gray-400 mt-0.5">
-                Handpicked selections
-              </p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 md:gap-3">
-            {group.products.slice(0, 10).map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
-          </div>
-        </section>
+      {/* ═══════════ CATEGORY SECTIONS (each API fires on its own scroll) ═══════════ */}
+      {topLevelCategories.map((cat) => (
+        <CategorySectionLazy
+          key={cat.slug}
+          slug={cat.slug}
+          name={cat.name}
+          icon={iconFor(cat.slug, cat.name)}
+        />
       ))}
 
       {/* ═══════════ FOOTER CTA ═══════════ */}
