@@ -146,6 +146,7 @@ export default function AdminCategories() {
             node={node}
             expanded={expanded}
             toggle={toggle}
+            setExpanded={setExpanded}
             editingSlug={editingSlug}
             setEditingSlug={setEditingSlug}
             onDelete={handleDelete}
@@ -172,6 +173,7 @@ function NodeRow({
   node,
   expanded,
   toggle,
+  setExpanded,
   editingSlug,
   setEditingSlug,
   onDelete,
@@ -181,6 +183,7 @@ function NodeRow({
   node: TreeNode;
   expanded: Record<string, boolean>;
   toggle: (slug: string) => void;
+  setExpanded: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   editingSlug: string | null;
   setEditingSlug: (s: string | null) => void;
   onDelete: (n: TreeNode) => void;
@@ -328,6 +331,7 @@ function NodeRow({
             node={c}
             expanded={expanded}
             toggle={toggle}
+            setExpanded={setExpanded}
             editingSlug={editingSlug}
             setEditingSlug={setEditingSlug}
             onDelete={onDelete}
