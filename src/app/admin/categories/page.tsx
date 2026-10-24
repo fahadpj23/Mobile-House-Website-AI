@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import {
   getCategories,
@@ -7,7 +8,7 @@ import {
   getAllCategorySpecs,
   saveCategorySpec,
 } from "@/lib/firestore";
-import { Category, CategorySpec, SpecTemplate } from "@/lib/types";
+import { Category, SpecField, SpecGroup, normalizeSpecs } from "@/lib/types";
 import toast from "react-hot-toast";
 import {
   Trash2,
@@ -29,7 +30,7 @@ interface TreeNode {
   slug: string;
   parentSlug?: string | null;
   depth: number;
-  specs: SpecTemplate[];
+  specs: SpecGroup[];
   children: TreeNode[];
 }
 
@@ -45,8 +46,10 @@ export default function AdminCategories() {
       getAllCategorySpecs(),
     ]);
 
-    const specMap: Record<string, SpecTemplate[]> = {};
-    allSpecs.forEach((s) => (specMap[s.categorySlug] = s.specs || []));
+    const specMap: Record<string, SpecGroup[]> = {};
+    allSpecs.forEach((s: any) => {
+      specMap[s.categorySlug] = normalizeSpecs(s.specs);
+    });
 
     const byParent: Record<string, Category[]> = {};
     cats.forEach((c: any) => {
@@ -188,7 +191,7 @@ function NodeRow({
   setEditingSlug: (s: string | null) => void;
   onDelete: (n: TreeNode) => void;
   onAddChild: (parent: TreeNode, name: string) => Promise<void>;
-  onSaveSpecs: (n: TreeNode, specs: SpecTemplate[]) => Promise<void>;
+  onSaveSpecs: (n: TreeNode, specs: SpecGroup[]) => Promise<void>;
 }) {
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -206,6 +209,11 @@ function NodeRow({
 
   const indent = node.depth * 24 + 12;
 
+  const totalFields = node.specs.reduce(
+    (n, g) => n + (g.fields?.length || 0),
+    0,
+  );
+
   return (
     <div>
       <div
@@ -213,19 +221,20 @@ function NodeRow({
         style={{ paddingLeft: `${indent}px` }}
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <button
-            onClick={() => toggle(node.slug)}
-            className={`text-gray-400 hover:text-gray-700 ${
-              hasChildren ? "" : "opacity-30"
-            }`}
-            disabled={!hasChildren}
-          >
-            {isExpanded ? (
-              <ChevronDown size={16} />
-            ) : (
-              <ChevronRight size={16} />
-            )}
-          </button>
+          {hasChildren ? (
+            <button
+              onClick={() => toggle(node.slug)}
+              className="text-gray-400 hover:text-gray-700"
+            >
+              {isExpanded ? (
+                <ChevronDown size={16} />
+              ) : (
+                <ChevronRight size={16} />
+              )}
+            </button>
+          ) : (
+            <span className="w-4 h-4 inline-block" aria-hidden="true" />
+          )}
 
           <LevelIcon size={16} className={levelColor} />
 
@@ -239,7 +248,8 @@ function NodeRow({
               </span>
             </p>
             <p className="text-xs text-gray-500 truncate">
-              /{node.slug} • {node.specs.length} spec fields
+              /{node.slug} • {node.specs.length} group(s) • {totalFields}{" "}
+              field(s)
               {hasChildren && ` • ${node.children.length} child(ren)`}
             </p>
           </div>
@@ -343,37 +353,74 @@ function NodeRow({
   );
 }
 
-// ===== Spec Editor =====
+// ===== Spec Editor (grouped) =====
 function SpecEditor({
   title,
   initial,
   onSave,
 }: {
   title: string;
-  initial: SpecTemplate[];
-  onSave: (specs: SpecTemplate[]) => Promise<void>;
+  initial: SpecGroup[];
+  onSave: (specs: SpecGroup[]) => Promise<void>;
 }) {
-  const [list, setList] = useState<SpecTemplate[]>(
-    initial.length ? initial : [{ key: "", placeholder: "", required: false }],
+  const [groups, setGroups] = useState<SpecGroup[]>(
+    initial.length ? initial : [emptyGroup()],
   );
+  const [collapsed, setCollapsed] = useState<Record<number, boolean>>({});
   const [saving, setSaving] = useState(false);
 
-  const add = () =>
-    setList((l) => [...l, { key: "", placeholder: "", required: false }]);
-
-  const update = (
-    i: number,
-    field: keyof SpecTemplate,
-    value: string | boolean,
-  ) =>
-    setList((l) =>
-      l.map((s, idx) => (idx === i ? { ...s, [field]: value } : s)),
+  // ---- group ops ----
+  const addGroup = () => setGroups((g) => [...g, emptyGroup()]);
+  const removeGroup = (gi: number) =>
+    setGroups((g) => g.filter((_, i) => i !== gi));
+  const updateGroupName = (gi: number, name: string) =>
+    setGroups((g) =>
+      g.map((grp, i) => (i === gi ? { ...grp, group: name } : grp)),
     );
 
-  const remove = (i: number) => setList((l) => l.filter((_, idx) => idx !== i));
+  // ---- field ops ----
+  const addField = (gi: number) =>
+    setGroups((g) =>
+      g.map((grp, i) =>
+        i === gi ? { ...grp, fields: [...grp.fields, emptyField()] } : grp,
+      ),
+    );
+  const removeField = (gi: number, fi: number) =>
+    setGroups((g) =>
+      g.map((grp, i) =>
+        i === gi
+          ? { ...grp, fields: grp.fields.filter((_, j) => j !== fi) }
+          : grp,
+      ),
+    );
+  const updateField = (gi: number, fi: number, patch: Partial<SpecField>) =>
+    setGroups((g) =>
+      g.map((grp, i) =>
+        i === gi
+          ? {
+              ...grp,
+              fields: grp.fields.map((f, j) =>
+                j === fi ? { ...f, ...patch } : f,
+              ),
+            }
+          : grp,
+      ),
+    );
 
   const handleSave = async () => {
-    const cleaned = list.filter((s) => s.key.trim());
+    const cleaned: SpecGroup[] = groups
+      .map((grp) => ({
+        group: grp.group.trim(),
+        fields: grp.fields
+          .map((f) => ({
+            key: f.key.trim(),
+            placeholder: f.placeholder?.trim() || "",
+            required: !!f.required,
+          }))
+          .filter((f) => f.key),
+      }))
+      .filter((grp) => grp.group && grp.fields.length > 0);
+
     setSaving(true);
     try {
       await onSave(cleaned);
@@ -383,54 +430,117 @@ function SpecEditor({
   };
 
   return (
-    <div className="m-3 p-3 bg-gray-50 rounded-lg space-y-2">
-      <p className="text-sm font-medium text-gray-700 mb-2">{title}</p>
+    <div className="m-3 p-3 bg-gray-50 rounded-lg space-y-3">
+      <p className="text-sm font-medium text-gray-700 mb-1">{title}</p>
 
-      {list.length === 0 ? (
+      {groups.length === 0 && (
         <p className="text-xs text-gray-500 py-1">
-          No spec fields. Click <b>Add field</b> to start.
+          No spec groups. Click <b>Add group</b> to start.
         </p>
-      ) : (
-        list.map((s, i) => (
-          <div key={i} className="flex gap-2 items-center">
-            <input
-              placeholder="Field name (e.g. RAM)"
-              className="input"
-              value={s.key}
-              onChange={(e) => update(i, "key", e.target.value)}
-            />
-            <input
-              placeholder="Placeholder (e.g. 8GB)"
-              className="input"
-              value={s.placeholder || ""}
-              onChange={(e) => update(i, "placeholder", e.target.value)}
-            />
-            <label className="flex items-center gap-1 text-xs whitespace-nowrap">
-              <input
-                type="checkbox"
-                checked={!!s.required}
-                onChange={(e) => update(i, "required", e.target.checked)}
-              />
-              Required
-            </label>
-            <button
-              type="button"
-              onClick={() => remove(i)}
-              className="text-red-500"
-            >
-              <X size={18} />
-            </button>
-          </div>
-        ))
       )}
+
+      {groups.map((grp, gi) => {
+        const isCollapsed = collapsed[gi];
+        return (
+          <div
+            key={gi}
+            className="border border-gray-200 rounded-lg bg-white p-2 space-y-2"
+          >
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCollapsed((c) => ({ ...c, [gi]: !c[gi] }))}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                {isCollapsed ? (
+                  <ChevronRight size={16} />
+                ) : (
+                  <ChevronDown size={16} />
+                )}
+              </button>
+              <input
+                placeholder="Group heading (e.g. General, In the Box)"
+                className="input flex-1 font-medium"
+                value={grp.group}
+                onChange={(e) => updateGroupName(gi, e.target.value)}
+              />
+              <span className="text-xs text-gray-400 whitespace-nowrap">
+                {grp.fields.length} field(s)
+              </span>
+              <button
+                type="button"
+                onClick={() => removeGroup(gi)}
+                className="text-red-500 hover:text-red-700"
+                title="Remove group"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+
+            {!isCollapsed && (
+              <div className="pl-6 space-y-2">
+                {grp.fields.length === 0 && (
+                  <p className="text-xs text-gray-500 py-1">
+                    No fields yet. Click <b>Add field</b>.
+                  </p>
+                )}
+                {grp.fields.map((f, fi) => (
+                  <div key={fi} className="flex gap-2 items-center">
+                    <input
+                      placeholder="Field name (e.g. Brand)"
+                      className="input"
+                      value={f.key}
+                      onChange={(e) =>
+                        updateField(gi, fi, { key: e.target.value })
+                      }
+                    />
+                    <input
+                      placeholder="Placeholder (e.g. PHILIPS)"
+                      className="input"
+                      value={f.placeholder || ""}
+                      onChange={(e) =>
+                        updateField(gi, fi, { placeholder: e.target.value })
+                      }
+                    />
+                    <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={!!f.required}
+                        onChange={(e) =>
+                          updateField(gi, fi, { required: e.target.checked })
+                        }
+                      />
+                      Required
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => removeField(gi, fi)}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => addField(gi)}
+                  className="text-blue-600 text-sm flex items-center gap-1"
+                >
+                  <Plus size={14} /> Add field
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
 
       <div className="flex gap-2 pt-2">
         <button
           type="button"
-          onClick={add}
+          onClick={addGroup}
           className="text-blue-600 text-sm flex items-center gap-1"
         >
-          <Plus size={14} /> Add field
+          <Plus size={14} /> Add group
         </button>
         <button
           type="button"
@@ -447,6 +557,14 @@ function SpecEditor({
 }
 
 // ===== Helpers =====
+function emptyField(): SpecField {
+  return { key: "", placeholder: "", required: false };
+}
+
+function emptyGroup(): SpecGroup {
+  return { group: "", fields: [emptyField()] };
+}
+
 function countNodes(node: TreeNode): number {
   return 1 + node.children.reduce((sum, c) => sum + countNodes(c), 0);
 }

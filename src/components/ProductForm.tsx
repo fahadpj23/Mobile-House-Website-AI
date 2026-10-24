@@ -17,14 +17,24 @@ import {
   Category,
   Brand,
   Product,
-  SpecTemplate,
+  SpecGroup,
+  SpecValue,
   Series,
   ProductOption,
   ProductVariant,
-  SpecValue,
+  normalizeSpecs,
 } from "@/lib/types";
 import toast from "react-hot-toast";
-import { Upload, X, Plus, Save, Trash2 } from "lucide-react";
+import {
+  Upload,
+  X,
+  Plus,
+  Save,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  Sparkles,
+} from "lucide-react";
 import CreatableCombobox from "./CreatableCombobox";
 import VariantEditor from "./VariantEditor";
 
@@ -62,9 +72,7 @@ export default function ProductForm({ initialData }: Props) {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
-  const [specTemplates, setSpecTemplates] = useState<
-    Record<string, SpecTemplate[]>
-  >({});
+  const [specGroups, setSpecGroups] = useState<Record<string, SpecGroup[]>>({});
   const [allSeries, setAllSeries] = useState<Series[]>([]);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -89,6 +97,7 @@ export default function ProductForm({ initialData }: Props) {
       stock: initialData?.stock ? String(initialData.stock) : "",
       images: initialData?.images || ([] as string[]),
       specifications: loadedSpecs,
+      highlights: initialData?.highlights || ([] as string[]),
       isSpecialOffer: initialData?.isSpecialOffer || false,
       isFeatured: initialData?.isFeatured || false,
       totalSold: initialData?.totalSold ? String(initialData.totalSold) : "",
@@ -104,7 +113,6 @@ export default function ProductForm({ initialData }: Props) {
     initialData?.variants || [],
   );
 
-  // ★ hasVariants — true only when BOTH options and variants exist
   const hasVariants = options.length > 0 && variants.length > 0;
 
   const hasVariantImages = useMemo(
@@ -127,9 +135,9 @@ export default function ProductForm({ initialData }: Props) {
       ]);
       setCategories(cats);
       setBrands(brs);
-      const map: Record<string, SpecTemplate[]> = {};
-      specs.forEach((s) => (map[s.categorySlug] = s.specs || []));
-      setSpecTemplates(map);
+      const map: Record<string, SpecGroup[]> = {};
+      specs.forEach((s) => (map[s.categorySlug] = normalizeSpecs(s.specs)));
+      setSpecGroups(map);
       setAllSeries(srs);
       setTemplatesLoaded(true);
     })();
@@ -155,24 +163,38 @@ export default function ProductForm({ initialData }: Props) {
 
   const leafSlug = path[path.length - 1] || "";
 
-  const mergedSpecs = useMemo<SpecValue[]>(() => {
-    const merged: Record<string, SpecValue> = {};
+  const mergedGroups = useMemo<SpecGroup[]>(() => {
+    const groupMap: Record<string, SpecGroup> = {};
     const order: string[] = [];
+
     for (const slug of path) {
-      for (const t of specTemplates[slug] || []) {
-        const key = t.key.trim();
-        if (!key) continue;
-        if (!(key in merged)) order.push(key);
-        merged[key] = {
-          key,
-          value: merged[key]?.value || "",
-          placeholder: t.placeholder,
-          required: !!t.required,
-        };
+      for (const grp of specGroups[slug] || []) {
+        const gName = grp.group.trim();
+        if (!gName) continue;
+        if (!groupMap[gName]) {
+          groupMap[gName] = { group: gName, fields: [] };
+          order.push(gName);
+        }
+        const existingKeys = new Set(
+          groupMap[gName].fields.map((f) => f.key.trim()),
+        );
+        for (const f of grp.fields || []) {
+          const k = f.key.trim();
+          if (!k) continue;
+          if (!existingKeys.has(k)) {
+            groupMap[gName].fields.push({
+              key: k,
+              placeholder: f.placeholder,
+              required: !!f.required,
+            });
+            existingKeys.add(k);
+          }
+        }
       }
     }
-    return order.map((k) => merged[k]);
-  }, [path, specTemplates]);
+
+    return order.map((g) => groupMap[g]).filter((g) => g.fields.length > 0);
+  }, [path, specGroups]);
 
   const prevPathRef = useRef<string>("");
   useEffect(() => {
@@ -184,22 +206,36 @@ export default function ProductForm({ initialData }: Props) {
     prevPathRef.current = pathKey;
 
     setForm((f) => {
-      const valuesByKey: Record<string, string> = {};
+      const valueMap: Record<string, string> = {};
       f.specifications.forEach((s) => {
-        if (s.key.trim()) valuesByKey[s.key.trim()] = s.value;
+        const k = s.key.trim();
+        if (!k) return;
+        const g = (s.group || "General").trim();
+        valueMap[`${g}::${k}`] = s.value;
       });
 
-      const fromTemplates: SpecValue[] = mergedSpecs.map((t) => ({
-        key: t.key,
-        value: valuesByKey[t.key] ?? "",
-        placeholder: t.placeholder,
-        required: !!t.required,
-      }));
+      const fromTemplates: SpecValue[] = [];
+      for (const grp of mergedGroups) {
+        for (const fld of grp.fields) {
+          fromTemplates.push({
+            key: fld.key,
+            value: valueMap[`${grp.group}::${fld.key}`] ?? "",
+            placeholder: fld.placeholder,
+            required: !!fld.required,
+            group: grp.group,
+          });
+        }
+      }
 
-      const templateKeys = new Set(mergedSpecs.map((s) => s.key));
-      const customFields: SpecValue[] = f.specifications.filter(
-        (s) => s.key.trim() && !templateKeys.has(s.key.trim()),
+      const templateIds = new Set(
+        fromTemplates.map((s) => `${s.group}::${s.key}`),
       );
+      const customFields: SpecValue[] = f.specifications.filter((s) => {
+        const k = s.key.trim();
+        if (!k) return false;
+        const g = (s.group || "General").trim();
+        return !templateIds.has(`${g}::${k}`);
+      });
 
       return {
         ...f,
@@ -207,7 +243,7 @@ export default function ProductForm({ initialData }: Props) {
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, mergedSpecs, templatesLoaded]);
+  }, [path, mergedGroups, templatesLoaded]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -237,7 +273,10 @@ export default function ProductForm({ initialData }: Props) {
   const addSpec = () =>
     setForm((f) => ({
       ...f,
-      specifications: [...f.specifications, { key: "", value: "" }],
+      specifications: [
+        ...f.specifications,
+        { key: "", value: "", group: "General" },
+      ],
     }));
 
   const updateSpec = (i: number, field: keyof SpecValue, value: string) =>
@@ -254,20 +293,25 @@ export default function ProductForm({ initialData }: Props) {
       specifications: f.specifications.filter((_, idx) => idx !== i),
     }));
 
-  // ═══════════════════════════════════════════════════════
-  // HANDLE SUBMIT — rewritten for reliability
-  //
-  // Key fixes:
-  //  1. Compute hasVariants locally (fresh state, not stale closure)
-  //  2. Only send `options`/`variants` when actually present
-  //  3. Only send optional fields when they have a value
-  //     (avoids `undefined` leaking into Firestore)
-  //  4. Surface the real error from addProduct/updateProduct
-  // ═══════════════════════════════════════════════════════
+  // ===== Highlights (manual) =====
+  const addHighlight = () =>
+    setForm((f) => ({ ...f, highlights: [...f.highlights, ""] }));
+
+  const updateHighlight = (i: number, value: string) =>
+    setForm((f) => ({
+      ...f,
+      highlights: f.highlights.map((h, idx) => (idx === i ? value : h)),
+    }));
+
+  const removeHighlight = (i: number) =>
+    setForm((f) => ({
+      ...f,
+      highlights: f.highlights.filter((_, idx) => idx !== i),
+    }));
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // ---------- Basic validation ----------
     if (!form.name.trim()) return toast.error("Name is required");
     if (!path.length) return toast.error("Category is required");
     if (!form.brand) return toast.error("Brand is required");
@@ -277,11 +321,9 @@ export default function ProductForm({ initialData }: Props) {
     const stockNum = toNum(form.stock);
     const totalSoldNum = toNum(form.totalSold);
 
-    // ---------- Decide mode from FRESH state ----------
     const enabledVariants = variants.filter((v) => v.enabled);
     const hasVariantsLocal = options.length > 0 && variants.length > 0;
 
-    // ---------- Image validation ----------
     const hasAnyVariantImages = options.some(
       (o) =>
         o.type === "color" && o.values.some((v) => (v.images?.length || 0) > 0),
@@ -291,13 +333,11 @@ export default function ProductForm({ initialData }: Props) {
       return toast.error("Add at least one image, or upload color images");
     }
 
-    // ---------- Spec validation ----------
     const missing = form.specifications.find(
       (s) => s.required && s.key.trim() && !s.value.trim(),
     );
     if (missing) return toast.error(`"${missing.key}" is required`);
 
-    // ---------- Price / stock validation ----------
     if (hasVariantsLocal) {
       if (enabledVariants.length === 0) {
         return toast.error("Enable at least one variant");
@@ -305,19 +345,27 @@ export default function ProductForm({ initialData }: Props) {
       const badPrice = enabledVariants.find((v) => v.price <= 0);
       if (badPrice) return toast.error("Every variant needs a price > 0");
     } else {
-      // Non-variant mode — base price must be valid
       if (priceNum <= 0) {
         return toast.error("Price must be greater than 0");
       }
     }
 
-    const cleanedSpecs = form.specifications.filter(
-      (s) => s.key.trim() && s.value.trim(),
-    );
+    const cleanedSpecs = form.specifications
+      .filter((s) => s.key.trim() && s.value.trim())
+      .map(({ key, value, placeholder, required, group }) => ({
+        key: key.trim(),
+        value: value.trim(),
+        placeholder,
+        required,
+        group,
+      }));
+
+    const cleanedHighlights = form.highlights
+      .map((h) => h.trim())
+      .filter(Boolean);
 
     setSaving(true);
     try {
-      // ---------- Derive final values ----------
       const finalPrice = hasVariantsLocal
         ? Math.min(...enabledVariants.map((v) => v.price))
         : priceNum;
@@ -331,10 +379,10 @@ export default function ProductForm({ initialData }: Props) {
         ? enabledVariants.reduce((s, v) => s + v.stock, 0)
         : stockNum;
 
-      // ---------- Build payload (skip undefined carefully) ----------
-      const payload: Record<string, any> = {
+      const payload: Omit<Product, "id"> = {
         name: form.name.trim(),
         description: form.description.trim(),
+        highlights: cleanedHighlights,
         price: finalPrice,
         category: leafSlug,
         categoryPath: path,
@@ -348,20 +396,14 @@ export default function ProductForm({ initialData }: Props) {
         totalSold: totalSoldNum,
       };
 
-      // Optional fields — only include when they have a value
       if (finalMrp !== undefined) payload.discountPrice = finalMrp;
       if (form.series) payload.series = form.series;
       if (form.seriesName) payload.seriesName = form.seriesName;
 
-      // Variant-only fields — only include when hasVariants is true
       if (hasVariantsLocal) {
         payload.options = options;
         payload.variants = variants;
       }
-      // NOTE: When hasVariantsLocal === false we intentionally DO NOT
-      // send options/variants — keeps Firestore document clean.
-
-      console.log("📦 Product payload:", payload);
 
       if (isEdit && initialData?.id) {
         await updateProduct(initialData.id, payload);
@@ -373,7 +415,6 @@ export default function ProductForm({ initialData }: Props) {
       router.push("/admin/products");
     } catch (err: any) {
       console.error("❌ Save product failed:", err);
-      // Surface the real error message so you can see WHY it fails
       const msg =
         err?.message ||
         err?.code ||
@@ -406,6 +447,20 @@ export default function ProductForm({ initialData }: Props) {
 
   const isLeaf = path.length > 0 && (childrenOf[leafSlug] || []).length === 0;
   const canConfirm = path.length > 0 && isLeaf;
+
+  const groupedFormSpecs = useMemo(() => {
+    const map: Record<string, { index: number; spec: SpecValue }[]> = {};
+    const order: string[] = [];
+    form.specifications.forEach((s, i) => {
+      const g = (s.group || "General").trim() || "General";
+      if (!map[g]) {
+        map[g] = [];
+        order.push(g);
+      }
+      map[g].push({ index: i, spec: s });
+    });
+    return order.map((g) => ({ group: g, items: map[g] }));
+  }, [form.specifications]);
 
   return (
     <form onSubmit={handleSubmit} className="max-w-4xl space-y-5">
@@ -611,12 +666,63 @@ export default function ProductForm({ initialData }: Props) {
             </div>
           </div>
 
+          {/* ⭐ MANUAL HIGHLIGHTS */}
+          <div className="card p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles size={18} className="text-amber-500" />
+                <h2 className="font-bold text-lg">Product Highlights</h2>
+              </div>
+              <button
+                type="button"
+                onClick={addHighlight}
+                className="text-blue-600 text-sm flex items-center gap-1"
+              >
+                <Plus size={14} /> Add highlight
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-500">
+              Short bullet points shown on the product page (e.g. “5000 mAh
+              battery”, “6.7-inch AMOLED display”). Add, edit, or remove them
+              freely — they are independent of the specifications below.
+            </p>
+
+            {form.highlights.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                No highlights yet. Click <b>Add highlight</b> to create one.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {form.highlights.map((h, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <span className="text-xs text-gray-400 w-6 text-right">
+                      {i + 1}.
+                    </span>
+                    <input
+                      className="input flex-1"
+                      placeholder="e.g. 5000 mAh battery, 67W fast charging"
+                      value={h}
+                      onChange={(e) => updateHighlight(i, e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeHighlight(i)}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* PRICING & STOCK */}
           <div className="card p-5 space-y-3">
             <h2 className="font-bold text-lg">Pricing & Stock</h2>
 
             {hasVariants ? (
-              // Variants take over pricing & stock — no manual input needed
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
                 <p className="font-medium mb-1">
                   Pricing & stock are managed by variants
@@ -819,8 +925,8 @@ export default function ProductForm({ initialData }: Props) {
             </div>
           )}
 
-          {/* SPECIFICATIONS */}
-          <div className="card p-5 space-y-3">
+          {/* SPECIFICATIONS (grouped) */}
+          <div className="card p-5 space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="font-bold text-lg">Specifications</h2>
               <button
@@ -828,7 +934,7 @@ export default function ProductForm({ initialData }: Props) {
                 onClick={addSpec}
                 className="text-blue-600 text-sm flex items-center gap-1"
               >
-                <Plus size={14} /> Add field
+                <Plus size={14} /> Add custom field
               </button>
             </div>
 
@@ -837,36 +943,15 @@ export default function ProductForm({ initialData }: Props) {
                 No specification fields configured for this category path.
               </p>
             ) : (
-              <div className="space-y-2">
-                {form.specifications.map((s, i) => (
-                  <div key={i} className="flex gap-2 items-center">
-                    <input
-                      placeholder="Key (e.g. RAM)"
-                      className="input"
-                      value={s.key}
-                      onChange={(e) => updateSpec(i, "key", e.target.value)}
-                    />
-                    <input
-                      placeholder={s.placeholder || "Value (e.g. 8GB)"}
-                      className={`input ${
-                        s.required && !s.value.trim() ? "border-red-300" : ""
-                      }`}
-                      value={s.value}
-                      onChange={(e) => updateSpec(i, "value", e.target.value)}
-                    />
-                    {s.required && (
-                      <span className="text-[10px] text-red-500 font-medium whitespace-nowrap">
-                        Required
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeSpec(i)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
+              <div className="space-y-4">
+                {groupedFormSpecs.map(({ group, items }) => (
+                  <SpecGroupBlock
+                    key={group}
+                    group={group}
+                    items={items}
+                    onUpdate={updateSpec}
+                    onRemove={removeSpec}
+                  />
                 ))}
               </div>
             )}
@@ -893,5 +978,71 @@ export default function ProductForm({ initialData }: Props) {
         </>
       )}
     </form>
+  );
+}
+
+// ===== Grouped spec block =====
+function SpecGroupBlock({
+  group,
+  items,
+  onUpdate,
+  onRemove,
+}: {
+  group: string;
+  items: { index: number; spec: SpecValue }[];
+  onUpdate: (i: number, field: keyof SpecValue, value: string) => void;
+  onRemove: (i: number) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <div className="border border-gray-200 rounded-lg bg-white">
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-t-lg"
+      >
+        <span className="flex items-center gap-2 font-medium text-sm">
+          {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+          {group}
+        </span>
+        <span className="text-xs text-gray-400">{items.length} field(s)</span>
+      </button>
+
+      {!collapsed && (
+        <div className="p-3 space-y-2">
+          {items.map(({ index, spec }) => (
+            <div key={index} className="flex gap-2 items-center">
+              <input
+                placeholder="Key (e.g. Brand)"
+                className="input"
+                value={spec.key}
+                onChange={(e) => onUpdate(index, "key", e.target.value)}
+              />
+              <input
+                placeholder={spec.placeholder || "Value"}
+                className={`input ${
+                  spec.required && !spec.value.trim() ? "border-red-300" : ""
+                }`}
+                value={spec.value}
+                onChange={(e) => onUpdate(index, "value", e.target.value)}
+              />
+              {spec.required && (
+                <span className="text-[10px] text-red-500 font-medium whitespace-nowrap">
+                  Required
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => onRemove(index)}
+                className="text-red-500 hover:text-red-700"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

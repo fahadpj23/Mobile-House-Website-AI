@@ -15,7 +15,7 @@ export async function GET(_req: Request, { params }: Params) {
 
   const slugToCat: Record<
     string,
-    { name: string; parentSlug?: string; slug: string }
+    { name: string; parentSlug?: string | null; slug: string }
   > = {};
   categories.forEach((c) => {
     slugToCat[c.slug] = {

@@ -91,7 +91,7 @@ export default async function HomePage() {
   /* ────────── Resolve top-level categories for lazy sections ────────── */
   const slugToCat: Record<
     string,
-    { name: string; parentSlug?: string; slug: string }
+    { name: string; parentSlug?: string | null; slug: string }
   > = {};
   categories.forEach((c) => {
     slugToCat[c.slug] = {

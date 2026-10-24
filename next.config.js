@@ -9,10 +9,8 @@ const nextConfig = {
         pathname: "/**",
       },
     ],
-    // Serve modern formats first
     formats: ["image/avif", "image/webp"],
-    // Cache optimized images aggressively (default is 60s in dev, 60 days in prod)
-    minimumCacheTTL: 60 * 60 * 24 * 30, // 30 days
+    minimumCacheTTL: 60 * 60 * 24 * 30,
   },
 };
 

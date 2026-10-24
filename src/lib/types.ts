@@ -1,3 +1,5 @@
+// lib/types.ts
+
 // ===== Category (N-level tree) =====
 export interface Category {
   id?: string;
@@ -6,16 +8,58 @@ export interface Category {
   parentSlug?: string | null;
 }
 
-export interface SpecTemplate {
+// ===== Spec model (grouped) =====
+export interface SpecField {
   key: string;
   placeholder?: string;
   required?: boolean;
 }
 
+export interface SpecGroup {
+  group: string;
+  fields: SpecField[];
+}
+
+export type SpecTemplate = SpecGroup;
+
 export interface CategorySpec {
+  id?: string;
   categorySlug: string;
   categoryName: string;
-  specs: SpecTemplate[];
+  specs: SpecGroup[];
+  updatedAt?: number;
+}
+
+export function normalizeSpecs(raw: any): SpecGroup[] {
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+  const first = raw[0];
+  if (
+    first &&
+    typeof first === "object" &&
+    "group" in first &&
+    "fields" in first
+  ) {
+    return (raw as SpecGroup[]).map((g) => ({
+      group: g.group,
+      fields: (g.fields || []).map((f) => ({
+        key: f.key ?? "",
+        placeholder: f.placeholder ?? "",
+        required: !!f.required,
+      })),
+    }));
+  }
+  return [
+    {
+      group: "General",
+      fields: raw
+        .filter((f: any) => f && typeof f === "object")
+        .map((f: any) => ({
+          key: f?.key ?? "",
+          placeholder: f?.placeholder ?? "",
+          required: !!f?.required,
+        })),
+    },
+  ];
 }
 
 export interface Brand {
@@ -62,12 +106,14 @@ export interface SpecValue {
   value: string;
   placeholder?: string;
   required?: boolean;
+  group?: string;
 }
 
 export interface Product {
   id?: string;
   name: string;
   description?: string;
+  highlights?: string[];
   price: number;
   discountPrice?: number;
   category: string;
@@ -110,7 +156,6 @@ export interface SpecialOffer {
   active: boolean;
 }
 
-// ===== Orders =====
 export type OrderStatus =
   | "pending"
   | "confirmed"
@@ -153,7 +198,6 @@ export interface Order {
   updatedAt?: any;
 }
 
-// ===== Admin RBAC =====
 export type AdminSection =
   | "dashboard"
   | "products"
@@ -170,4 +214,15 @@ export interface AdminUser {
   role: "admin" | "super";
   permissions: AdminSection[] | ["*"];
   addedAt?: number;
+}
+
+export interface Customer {
+  id?: string;
+  email: string;
+  name?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  createdAt?: number;
+  updatedAt?: number;
 }

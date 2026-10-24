@@ -20,7 +20,7 @@ import {
   Order,
   CategorySpec,
   Brand,
-  SpecTemplate,
+  SpecGroup,
   Banner,
   SpecialOffer,
   Customer,
@@ -113,13 +113,13 @@ export const getCategorySpec = async (
 ): Promise<CategorySpec | null> => {
   const snap = await getDoc(doc(db, "categorySpecs", categorySlug));
   if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as CategorySpec;
+  return { id: snap.id, ...snap.data() } as unknown as CategorySpec;
 };
 
 export const saveCategorySpec = async (
   categorySlug: string,
   categoryName: string,
-  specs: SpecTemplate[],
+  specs: SpecGroup[],
 ) => {
   return setDoc(doc(db, "categorySpecs", categorySlug), {
     categorySlug,
@@ -131,7 +131,10 @@ export const saveCategorySpec = async (
 
 export const getAllCategorySpecs = async (): Promise<CategorySpec[]> => {
   const snap = await getDocs(collection(db, "categorySpecs"));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as CategorySpec);
+  return snap.docs.map((d) => {
+    const data = d.data() as Omit<CategorySpec, "id">;
+    return { id: d.id, ...data };
+  });
 };
 
 // ============================================================
@@ -240,11 +243,6 @@ export const updateOrder = async (id: string, data: Partial<Order>) => {
 // ============================================================
 const bannersCol = collection(db, "banners");
 
-/**
- * Fetch banners. Optionally filter by position.
- * Sort is done in memory so banners without an `order` field
- * are not silently dropped by Firestore's orderBy().
- */
 export async function getBanners(position?: string): Promise<Banner[]> {
   const constraints = position ? [where("position", "==", position)] : [];
   const q = query(bannersCol, ...constraints);
@@ -266,13 +264,7 @@ export async function getBanners(position?: string): Promise<Banner[]> {
     });
 }
 
-/**
- * Add a banner.
- * Writes `order` (max existing + 1) so it sorts to the end,
- * and `createdAt` for stable tie-breaking.
- */
 export async function addBanner(data: Omit<Banner, "id">) {
-  // Compute next order value from existing banners
   const existing = await getDocs(bannersCol);
   const maxOrder = existing.docs.reduce((max, d) => {
     const o = (d.data() as { order?: number }).order;

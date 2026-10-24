@@ -321,7 +321,7 @@ export default function AdminUsersPage() {
             const isSelf = a.uid === currentAdmin?.uid;
             const isWildcard =
               Array.isArray(a.permissions) &&
-              a.permissions.includes("*" as AdminSection);
+              (a.permissions as string[]).includes("*");
             return (
               <div key={a.uid} className="card p-4 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">

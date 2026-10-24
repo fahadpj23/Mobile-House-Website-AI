@@ -1,15 +1,21 @@
+// app/admin/products/page.tsx
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { getProducts, deleteProduct } from "@/lib/firestore";
 import { Product } from "@/lib/types";
 import { Plus, Edit, Trash2, Search, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function AdminProducts() {
+  const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+
+  // ★ Tracks which product is currently being opened for editing
+  const [openingId, setOpeningId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -41,7 +47,6 @@ export default function AdminProducts() {
     }
   };
 
-  // Display image: base → first color variant image → placeholder
   const displayImage = (p: Product) => {
     if (p.images?.length) return p.images[0];
     if (p.options?.length) {
@@ -136,8 +141,14 @@ export default function AdminProducts() {
                 {filtered.map((p) => {
                   const variantCount =
                     p.variants?.filter((v) => v.enabled).length || 0;
+                  const isOpening = openingId === p.id;
                   return (
-                    <tr key={p.id} className="border-t hover:bg-gray-50">
+                    <tr
+                      key={p.id}
+                      className={`border-t transition ${
+                        isOpening ? "bg-blue-50/60" : "hover:bg-gray-50"
+                      }`}
+                    >
                       <td className="p-3">
                         <img
                           src={displayImage(p)}
@@ -182,13 +193,27 @@ export default function AdminProducts() {
                         </span>
                       </td>
                       <td className="p-3 text-right space-x-2 whitespace-nowrap">
-                        <Link
-                          href={`/admin/products/${p.id}/edit`}
-                          className="inline-block text-blue-600 hover:text-blue-800 p-1"
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isOpening) return;
+                            setOpeningId(p.id!);
+                            router.push(
+                              `/admin/products/edit?id=${encodeURIComponent(
+                                p.id!,
+                              )}`,
+                            );
+                          }}
+                          disabled={isOpening}
+                          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 p-1 disabled:opacity-60 disabled:cursor-wait"
                           title="Edit"
                         >
-                          <Edit size={16} />
-                        </Link>
+                          {isOpening ? (
+                            <Loader2 size={16} className="animate-spin" />
+                          ) : (
+                            <Edit size={16} />
+                          )}
+                        </button>
                         <button
                           onClick={() => handleDelete(p.id!, p.name)}
                           className="text-red-500 hover:text-red-700 p-1"
