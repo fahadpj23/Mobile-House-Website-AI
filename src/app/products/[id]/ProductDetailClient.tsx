@@ -22,6 +22,21 @@ import {
   Heart,
   Share2,
   Info,
+  X,
+  Battery,
+  Droplet,
+  Clock,
+  Scale,
+  Wind,
+  Activity,
+  Cpu,
+  Settings,
+  CircleDot,
+  Smartphone,
+  Volume2,
+  ChevronUp,
+  LayoutGrid,
+  RotateCw,
 } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════
@@ -74,44 +89,92 @@ function InfoSkeleton() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   Highlights — editorial bullet column (medium text)
+   Highlights — Single line text with Icon
    ═══════════════════════════════════════════════════════ */
 function HighlightsBlock({ highlights }: { highlights: string[] }) {
   if (!highlights.length) return null;
 
+  const getIconForHighlight = (text: string) => {
+    const t = text.toLowerCase();
+    const iconClass = "text-gray-900";
+    const size = 20;
+
+    if (t.includes("wash") && t.includes("manual"))
+      return <LayoutGrid size={size} className={iconClass} />;
+    if (t.includes("capacity") || t.includes("kg") || t.includes("family"))
+      return <Scale size={size} className={iconClass} />;
+    if (t.includes("rpm") || t.includes("powerful") || t.includes("cleaning"))
+      return <RotateCw size={size} className={iconClass} />;
+    if (t.includes("star") || t.includes("energy"))
+      return <Sparkles size={size} className={iconClass} />;
+    if (t.includes("modes") || t.includes("wash modes"))
+      return <Settings size={size} className={iconClass} />;
+    if (t.includes("battery") || t.includes("charge"))
+      return <Battery size={size} className={iconClass} />;
+    if (t.includes("water") || t.includes("liquid") || t.includes("spill"))
+      return <Droplet size={size} className={iconClass} />;
+    if (t.includes("warranty") || t.includes("protect") || t.includes("safety"))
+      return <Shield size={size} className={iconClass} />;
+    if (t.includes("speed") || t.includes("fast") || t.includes("quick"))
+      return <Wind size={size} className={iconClass} />;
+    if (t.includes("time") || t.includes("hour") || t.includes("min"))
+      return <Clock size={size} className={iconClass} />;
+    if (t.includes("motor") || t.includes("watt"))
+      return <Zap size={size} className={iconClass} />;
+    if (
+      t.includes("smart") ||
+      t.includes("chip") ||
+      t.includes("app") ||
+      t.includes("wifi")
+    )
+      return <Cpu size={size} className={iconClass} />;
+    if (t.includes("sound") || t.includes("volume") || t.includes("noise"))
+      return <Volume2 size={size} className={iconClass} />;
+    if (t.includes("display") || t.includes("screen"))
+      return <Smartphone size={size} className={iconClass} />;
+    if (t.includes("health") || t.includes("heart") || t.includes("pulse"))
+      return <Activity size={size} className={iconClass} />;
+    if (t.includes("spin") || t.includes("dry") || t.includes("drum"))
+      return <CircleDot size={size} className={iconClass} />;
+
+    return <Sparkles size={size} className={iconClass} />;
+  };
+
   return (
-    <div className="mb-6">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500 mb-2.5 flex items-center gap-1.5">
-        <Sparkles size={10} className="text-amber-500" />
-        Key features
-      </p>
-      <ul className="space-y-2">
-        {highlights.map((h, i) => (
-          <li
-            key={i}
-            className="flex items-start gap-2.5 text-sm text-gray-700 leading-relaxed"
-          >
-            <span className="text-amber-500 shrink-0 mt-0.5 font-semibold text-sm leading-none">
-              →
-            </span>
-            <span className="flex-1">{h}</span>
-          </li>
-        ))}
-      </ul>
+    <div className="mt-8 border-t border-gray-200 pt-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-medium text-gray-900">
+          Product highlights
+        </h2>
+        <button className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 hover:bg-gray-100 transition">
+          <ChevronUp size={18} />
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        {highlights.map((h, i) => {
+          return (
+            <div key={i} className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 border border-gray-200">
+                {getIconForHighlight(h)}
+              </div>
+              <span className="text-sm text-gray-900 leading-snug">{h}</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
 /* ═══════════════════════════════════════════════════════
-   Specifications — refined editorial definition list
+   Specifications — Flipkart-style table layout
    ═══════════════════════════════════════════════════════ */
 function SpecificationsBlock({
   groups,
 }: {
   groups: { group: string; specs: SpecValue[] }[];
 }) {
-  const [expanded, setExpanded] = useState(false);
-
   if (!groups.length) {
     return (
       <div className="flex items-start gap-2 py-3">
@@ -121,86 +184,63 @@ function SpecificationsBlock({
     );
   }
 
-  const total = groups.reduce((n, g) => n + g.specs.length, 0);
-  const previewCount = 4;
-
-  const preview: SpecValue[] = [];
-  outer: for (const g of groups) {
-    for (const s of g.specs) {
-      preview.push(s);
-      if (preview.length >= previewCount) break outer;
-    }
-  }
-
-  const renderRow = (spec: SpecValue, i: number) => (
-    <div
-      key={i}
-      className="flex items-start gap-3 py-2.5 border-b border-gray-100 last:border-0 hover:bg-gray-50/60 -mx-2 px-2 rounded transition-colors"
-    >
-      <span className="text-xs text-gray-500 shrink-0 w-28 leading-relaxed">
-        {spec.key}
-      </span>
-      <span className="text-xs text-gray-900 font-medium break-words leading-relaxed flex-1 text-right">
-        {spec.value}
-      </span>
-    </div>
-  );
-
   return (
-    <div className="mt-6 pt-6 border-t border-gray-200">
-      {/* Header */}
-      <div className="flex items-baseline justify-between mb-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500 flex items-center gap-1.5">
-          <span className="w-3 h-px bg-gray-400" />
+    <div className="mt-8 border-t border-gray-200 pt-6">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-medium text-gray-900 tracking-tight">
           Specifications
-        </p>
-        <span className="text-[10px] text-gray-400 font-medium">
-          {total} field{total === 1 ? "" : "s"}
-        </span>
+        </h2>
+        <button className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 hover:bg-gray-100 transition">
+          <ChevronUp size={18} />
+        </button>
       </div>
 
-      {/* Collapsed preview */}
-      {!expanded && <div>{preview.map(renderRow)}</div>}
+      <div className="space-y-6">
+        {groups.map(({ group, specs }) => {
+          const isInTheBox = group.toLowerCase().includes("box");
 
-      {/* Expanded — grouped */}
-      {expanded && (
-        <div className="space-y-6">
-          {groups.map(({ group, specs }) => (
-            <div key={group}>
-              <div className="flex items-center gap-2 mb-2.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-blue-700">
-                  {group}
-                </p>
-                <span className="flex-1 h-px bg-gray-100" />
-                <span className="text-[9px] text-gray-400 font-semibold">
-                  {specs.length}
-                </span>
-              </div>
-              <div>{specs.map(renderRow)}</div>
+          return (
+            <div key={group} className="mb-6">
+              <h3 className="text-base font-medium text-gray-900 mb-4">
+                {group}
+              </h3>
+
+              {isInTheBox ? (
+                <div className="flex flex-col gap-1">
+                  {specs.map((spec, i) => (
+                    <div key={i} className="flex flex-col">
+                      <span className="text-sm text-gray-500 mb-1">
+                        {spec.key}
+                      </span>
+                      <span className="text-sm text-gray-800 leading-relaxed">
+                        {spec.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+                  {specs.map((spec, i) => (
+                    <div
+                      key={i}
+                      className={`flex flex-col ${
+                        i >= 2 ? "border-t border-gray-100 pt-4" : ""
+                      }`}
+                    >
+                      <span className="text-sm text-gray-500 mb-1">
+                        {spec.key}
+                      </span>
+                      <span className="text-sm text-gray-800 leading-relaxed font-normal">
+                        {spec.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Toggle */}
-      <button
-        type="button"
-        onClick={() => setExpanded((e) => !e)}
-        className="mt-4 w-full flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-blue-700 hover:text-blue-800 transition border border-dashed border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50/40"
-      >
-        {expanded ? (
-          <>
-            Show less
-            <span className="text-sm leading-none">↑</span>
-          </>
-        ) : (
-          <>
-            Show all {total} specs
-            <span className="text-sm leading-none">↓</span>
-          </>
-        )}
-      </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -257,6 +297,111 @@ function MobileBuyBar({
 }
 
 /* ═══════════════════════════════════════════════════════
+   Image Zoom Modal
+   ═══════════════════════════════════════════════════════ */
+function ImageZoomModal({
+  images,
+  activeIndex,
+  onClose,
+  onNavigate,
+}: {
+  images: string[];
+  activeIndex: number;
+  onClose: () => void;
+  onNavigate: (index: number) => void;
+}) {
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "auto";
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft")
+        onNavigate((activeIndex - 1 + images.length) % images.length);
+      if (e.key === "ArrowRight") onNavigate((activeIndex + 1) % images.length);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeIndex, images.length, onClose, onNavigate]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
+        aria-label="Close zoom"
+      >
+        <X size={20} />
+      </button>
+
+      <div
+        className="relative w-full max-w-4xl aspect-square flex items-center justify-center"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img
+          src={images[activeIndex]}
+          alt={`Zoomed view ${activeIndex + 1}`}
+          className="max-w-full max-h-[85vh] object-contain"
+        />
+
+        {images.length > 1 && (
+          <>
+            <button
+              onClick={() =>
+                onNavigate((activeIndex - 1 + images.length) % images.length)
+              }
+              className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
+              aria-label="Previous image"
+            >
+              <ChevronLeft size={24} />
+            </button>
+            <button
+              onClick={() => onNavigate((activeIndex + 1) % images.length)}
+              className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
+              aria-label="Next image"
+            >
+              <ChevronRight size={24} />
+            </button>
+          </>
+        )}
+      </div>
+
+      {images.length > 1 && (
+        <div
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2 overflow-x-auto max-w-[90vw] p-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {images.map((img, i) => (
+            <button
+              key={i}
+              onClick={() => onNavigate(i)}
+              className={`relative w-12 h-12 md:w-16 md:h-16 rounded-lg overflow-hidden shrink-0 transition-all ${
+                activeIndex === i
+                  ? "ring-2 ring-white opacity-100"
+                  : "opacity-50 hover:opacity-100"
+              }`}
+            >
+              <img
+                src={img}
+                alt=""
+                className="w-full h-full object-cover bg-white"
+              />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
    Main component
    ═══════════════════════════════════════════════════════ */
 export default function ProductDetailClient({ product }: { product: Product }) {
@@ -276,6 +421,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
   const [imgThumbError, setImgThumbError] = useState<Record<number, boolean>>(
     {},
   );
+  const [isZoomOpen, setIsZoomOpen] = useState(false);
 
   const loadGenerationRef = useRef(0);
 
@@ -567,11 +713,12 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                         loading="eager"
                         fetchPriority="high"
                         decoding="sync"
-                        className={`absolute inset-0 w-full h-full object-contain p-8 transition-all duration-300 ${
+                        className={`absolute inset-0 w-full h-full object-contain p-8 transition-all duration-300 cursor-zoom-in ${
                           imgLoaded
                             ? "opacity-100 scale-100"
                             : "opacity-0 scale-95"
                         }`}
+                        onClick={() => setIsZoomOpen(true)}
                         onLoad={() => {
                           setLoadedSrc((prev) =>
                             prev === currentImage ? prev : currentImage,
@@ -626,7 +773,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                   </div>
 
                   {gallery.length > 1 && (
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur text-gray-700 text-[10px] font-medium px-2.5 py-0.5 rounded-full shadow-sm">
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur text-gray-700 text-[10px] font-medium px-2.5 py-0.5 rounded-full shadow-sm pointer-events-none">
                       {safeActiveImg + 1} / {gallery.length}
                     </div>
                   )}
@@ -711,12 +858,32 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                   )}
                 </div>
 
-                {/* Title — smaller size, extrabold weight */}
-                <h1 className="text-xl md:text-2xl font-extrabold mb-4 leading-snug text-gray-900 tracking-tight">
+                {/* Title */}
+                <h1 className="text-xl md:text-2xl font-extrabold mb-2 leading-snug text-gray-900 tracking-tight">
                   {displayTitle}
                 </h1>
 
-                {/* Price */}
+                {/* Rating & Discount (After Title, Before Variants) */}
+                <div className="flex items-center gap-2 mb-6 text-xs">
+                  <div className="flex items-center gap-1 bg-green-700 px-1.5 py-0.5 rounded text-white font-medium">
+                    <span>4.3</span>
+                    <Star size={10} className="fill-white" />
+                  </div>
+                  <span className="text-gray-500 font-medium">
+                    2,687 Ratings & 123 Reviews
+                  </span>
+
+                  {hasMrp && (
+                    <>
+                      <span className="text-gray-300 ml-2">|</span>
+                      <span className="text-green-700 font-semibold ml-2">
+                        {discountPct}% off
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                {/* Price & MRP (Before Variants) */}
                 <div className="flex items-end gap-3 flex-wrap mb-2">
                   <span className="text-3xl md:text-4xl font-bold text-gray-900 leading-none">
                     ₹{price.toLocaleString()}
@@ -726,31 +893,18 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                       <span className="text-base line-through text-gray-400 pb-1">
                         ₹{originalPrice!.toLocaleString()}
                       </span>
-                      <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded mb-1">
-                        {discountPct}% OFF
-                      </span>
                     </>
                   )}
                 </div>
 
                 {hasMrp && (
-                  <p className="text-xs text-green-700 font-medium mb-5 flex items-center gap-1">
+                  <p className="text-xs text-green-700 font-medium mb-6 flex items-center gap-1">
                     <Zap size={11} />
                     You save ₹{(originalPrice! - price).toLocaleString()}
                   </p>
                 )}
 
-                {/* Description */}
-                {product.description && (
-                  <p className="text-sm text-gray-600 leading-relaxed mb-6">
-                    {product.description}
-                  </p>
-                )}
-
-                {/* Highlights */}
-                <HighlightsBlock highlights={highlights} />
-
-                {/* Variants */}
+                {/* ─────────── VARIANTS ─────────── */}
                 {hasVariants && (
                   <div className="space-y-5 mb-6 pb-6 border-b border-gray-100">
                     {product.options!.map((opt) => {
@@ -835,14 +989,27 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                   </div>
                 )}
 
-                {/* Qty + Add */}
+                {/* Description */}
+                {product.description && (
+                  <p className="text-sm text-gray-600 leading-relaxed mb-6">
+                    {product.description}
+                  </p>
+                )}
+
+                {/* Highlights */}
+                <HighlightsBlock highlights={highlights} />
+
+                {/* Gap between highlights and buttons */}
+                <div className="mt-10"></div>
+
+                {/* Qty + Add Buttons */}
                 <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
-                  <div className="flex items-center border border-gray-300 rounded-xl h-12 bg-white">
+                  <div className="flex items-center border border-gray-300 rounded-sm h-12 bg-white">
                     <button
                       type="button"
                       onClick={decQty}
                       disabled={!canDecrement}
-                      className="w-11 h-full flex items-center justify-center text-gray-600 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed transition rounded-l-xl"
+                      className="w-11 h-full flex items-center justify-center text-gray-600 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed transition rounded-l-sm"
                       aria-label="Decrease quantity"
                     >
                       <Minus size={15} />
@@ -865,7 +1032,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                       type="button"
                       onClick={incQty}
                       disabled={!canIncrement}
-                      className="w-11 h-full flex items-center justify-center text-gray-600 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed transition rounded-r-xl"
+                      className="w-11 h-full flex items-center justify-center text-gray-600 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed transition rounded-r-sm"
                       aria-label="Increase quantity"
                     >
                       <Plus size={15} />
@@ -875,12 +1042,12 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                   <button
                     onClick={handleAdd}
                     disabled={stock <= 0}
-                    className={`hidden md:flex flex-1 h-12 rounded-xl text-sm font-bold items-center justify-center gap-2 transition-all ${
+                    className={`hidden md:flex flex-1 h-12 rounded-sm text-sm font-bold items-center justify-center gap-2 transition-all ${
                       stock <= 0
                         ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                         : justAdded
                           ? "bg-green-600 text-white"
-                          : "bg-gray-900 hover:bg-black text-white active:scale-[0.98]"
+                          : "bg-[#ff9f00] hover:bg-[#e68f00] text-white shadow-sm"
                     }`}
                   >
                     {justAdded ? (
@@ -893,10 +1060,22 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                       </>
                     )}
                   </button>
+
+                  <button
+                    onClick={handleAdd}
+                    disabled={stock <= 0}
+                    className={`hidden md:flex flex-1 h-12 rounded-sm text-sm font-bold items-center justify-center gap-2 transition-all ${
+                      stock <= 0
+                        ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                        : "bg-[#fb641b] hover:bg-[#e55a15] text-white shadow-sm"
+                    }`}
+                  >
+                    <Zap size={16} /> Buy Now
+                  </button>
                 </div>
 
                 {/* Meta strip */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-gray-500 mb-6">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-gray-500 mb-6 mt-6">
                   <span className="inline-flex items-center gap-1">
                     <Package size={11} />
                     <span className="text-gray-800 font-semibold">
@@ -936,6 +1115,16 @@ export default function ProductDetailClient({ product }: { product: Product }) {
           hasVariants={hasVariants}
           onAdd={handleAdd}
           justAdded={justAdded}
+        />
+      )}
+
+      {/* Image Zoom Modal */}
+      {isZoomOpen && (
+        <ImageZoomModal
+          images={gallery}
+          activeIndex={safeActiveImg}
+          onClose={() => setIsZoomOpen(false)}
+          onNavigate={setActiveImg}
         />
       )}
     </>
