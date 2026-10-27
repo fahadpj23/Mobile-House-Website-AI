@@ -97,6 +97,7 @@ export interface ProductVariant {
   price: number;
   discountPrice?: number;
   stock: number;
+  /** Per-variant gallery. If empty, storefront falls back to color images. */
   images?: string[];
   enabled: boolean;
 }

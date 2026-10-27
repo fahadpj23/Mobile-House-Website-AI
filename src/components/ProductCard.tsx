@@ -1,7 +1,7 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import Image from "next/image"; // 👈 IMPORT NEXT IMAGE
+import Image from "next/image";
 import { Product, ProductVariant } from "@/lib/types";
 import { useCart } from "./CartProvider";
 import toast from "react-hot-toast";
@@ -13,8 +13,8 @@ export default function ProductCard({
 }) {
   const { addItem } = useCart();
 
-  // Track whether the image finished loading (for fade-in)
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   if (!product || !product.id) return null;
 
@@ -25,13 +25,25 @@ export default function ProductCard({
     return (
       product.variants!.find((v) => v.enabled && v.stock > 0) ||
       product.variants!.find((v) => v.enabled) ||
+      product.variants!.find((v) => (v.images?.length || 0) > 0) || // prefer one with images even if disabled
       product.variants![0]
     );
   }, [hasVariants, product.variants]);
 
+  /* ✅ Display image priority (mirrors ProductDetailClient):
+       1. variant.images[0]          → per-variant uploaded in VariantEditor
+       2. color option value images  → color-level upload
+       3. any color value image
+       4. product.images[0]          → base product image
+       5. /placeholder.png
+  */
   const displayImage = useMemo(() => {
-    if (product.images?.length) return product.images[0];
+    // 1️⃣ Per-variant image
+    if (firstVariant?.images?.length) {
+      return firstVariant.images[0];
+    }
 
+    // 2️⃣ Color option image for the first variant
     if (firstVariant && product.options?.length) {
       const colorIdx = product.options.findIndex((o) => o.type === "color");
       if (colorIdx !== -1) {
@@ -42,6 +54,7 @@ export default function ProductCard({
       }
     }
 
+    // 3️⃣ Any color value image
     if (product.options?.length) {
       for (const opt of product.options) {
         if (opt.type !== "color") continue;
@@ -51,8 +64,18 @@ export default function ProductCard({
       }
     }
 
+    // 4️⃣ Base product image
+    if (product.images?.length) return product.images[0];
+
+    // 5️⃣ Fallback
     return "/placeholder.png";
-  }, [product.images, product.options, firstVariant]);
+  }, [firstVariant, product.images, product.options]);
+
+  /* ✅ Reset fade-in + error state whenever the displayed image changes */
+  useEffect(() => {
+    setImgLoaded(false);
+    setImgError(false);
+  }, [displayImage]);
 
   const price = firstVariant ? firstVariant.price : product.price;
   const mrp = firstVariant ? firstVariant.discountPrice : product.discountPrice;
@@ -137,7 +160,6 @@ export default function ProductCard({
     toast.success(`${displayName} added to cart`);
   };
 
-  /* Stock link label + color */
   const stockLabel = outOfStock
     ? "Out of stock"
     : stock <= 5
@@ -157,17 +179,23 @@ export default function ProductCard({
         className="relative block bg-gradient-to-br from-gray-50 to-white p-2"
       >
         <div className="relative aspect-square rounded-md overflow-hidden bg-white">
-          {/* 👇 NEXT/IMAGE: Automatically lazy loads & optimizes size */}
-          <Image
-            src={displayImage}
-            alt={displayName}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-            onLoad={() => setImgLoaded(true)}
-            className={`object-contain transition-all duration-300 group-hover:scale-105 ${
-              imgLoaded ? "opacity-100" : "opacity-0"
-            }`}
-          />
+          {imgError ? (
+            <div className="w-full h-full flex items-center justify-center text-gray-300 text-xs">
+              No image
+            </div>
+          ) : (
+            <Image
+              src={displayImage}
+              alt={displayName}
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+              onLoad={() => setImgLoaded(true)}
+              onError={() => setImgError(true)}
+              className={`object-contain transition-all duration-300 group-hover:scale-105 ${
+                imgLoaded ? "opacity-100" : "opacity-0"
+              }`}
+            />
+          )}
 
           {hasDiscount && (
             <span className="absolute top-1.5 left-1.5 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm z-10">
@@ -185,7 +213,6 @@ export default function ProductCard({
 
       {/* Body */}
       <div className="px-2.5 pb-2.5 pt-1 flex-1 flex flex-col">
-        {/* Product name — clickable link */}
         <Link
           href={`/products/${product.id}`}
           className="text-[11px] font-medium line-clamp-2 mt-0.5 leading-snug text-gray-800 hover:text-blue-600 transition-colors"
@@ -204,7 +231,6 @@ export default function ProductCard({
           )}
         </div>
 
-        {/* Stock link — navigates to product page */}
         <Link
           href={`/products/${product.id}`}
           className={`text-[10px] font-medium underline-offset-2 hover:underline mt-0.5 ${stockClass}`}
@@ -212,17 +238,27 @@ export default function ProductCard({
           {stockLabel}
         </Link>
 
-        <button
-          onClick={handleAdd}
-          disabled={outOfStock}
-          className={`mt-1.5 w-full text-[10px] font-semibold py-1.5 rounded-md transition-all ${
-            outOfStock
-              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white shadow-sm hover:shadow"
-          }`}
-        >
-          {outOfStock ? "Out of Stock" : "Add to Cart"}
-        </button>
+        {/* ✅ Variant products → "Select Options" navigation; simple products → Add to Cart */}
+        {hasVariants ? (
+          <Link
+            href={`/products/${product.id}`}
+            className="mt-1.5 w-full text-[10px] font-semibold py-1.5 rounded-md text-center bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white shadow-sm hover:shadow transition-all"
+          >
+            Select Options
+          </Link>
+        ) : (
+          <button
+            onClick={handleAdd}
+            disabled={outOfStock}
+            className={`mt-1.5 w-full text-[10px] font-semibold py-1.5 rounded-md transition-all ${
+              outOfStock
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white shadow-sm hover:shadow"
+            }`}
+          >
+            {outOfStock ? "Out of Stock" : "Add to Cart"}
+          </button>
+        )}
       </div>
     </div>
   );

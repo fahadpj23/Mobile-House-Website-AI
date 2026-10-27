@@ -1,6 +1,17 @@
 "use client";
 import { useMemo, useState } from "react";
-import { Plus, X, AlertTriangle, Upload, Loader2, Trash2 } from "lucide-react";
+import {
+  Plus,
+  X,
+  AlertTriangle,
+  Upload,
+  Loader2,
+  Trash2,
+  ImagePlus,
+  CheckSquare,
+  Square,
+  RefreshCw,
+} from "lucide-react";
 import imageCompression from "browser-image-compression";
 import { ProductOption, ProductOptionValue, ProductVariant } from "@/lib/types";
 import { uploadImage } from "@/lib/storage";
@@ -23,6 +34,19 @@ function cartesian<T>(arrays: T[][]): T[][] {
 }
 
 const uid = () => Math.random().toString(36).slice(2, 10);
+
+/** Stable key that ignores option ordering. */
+const comboKey = (ids: string[]) => [...ids].sort().join("|");
+
+/**
+ * Count how many of the variant's optionValueIds still exist in current options.
+ * If it's less than the number of options, the variant is stale (needs regeneration).
+ */
+function isVariantStale(v: ProductVariant, options: ProductOption[]): boolean {
+  if (v.optionValueIds.length !== options.length) return true;
+  const liveIds = new Set(options.flatMap((o) => o.values.map((x) => x.id)));
+  return !v.optionValueIds.every((id) => liveIds.has(id));
+}
 
 async function compressToWebp(file: File): Promise<File> {
   if (file.size < 100 * 1024) return file;
@@ -54,7 +78,32 @@ export default function VariantEditor({
     options.length > 0 || variants.length > 0,
   );
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const [uploadingVariant, setUploadingVariant] = useState<string | null>(null);
+  const [bulkUploading, setBulkUploading] = useState(false);
 
+  const [selectedVariantIds, setSelectedVariantIds] = useState<Set<string>>(
+    new Set(),
+  );
+
+  const toggleSelectVariant = (id: string) =>
+    setSelectedVariantIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const toggleSelectAll = () => {
+    if (selectedVariantIds.size === variants.length) {
+      setSelectedVariantIds(new Set());
+    } else {
+      setSelectedVariantIds(new Set(variants.map((v) => v.id)));
+    }
+  };
+
+  const clearSelection = () => setSelectedVariantIds(new Set());
+
+  // ── Option management ────────────────────────────────
   const addOption = () => {
     const next: ProductOption = {
       id: uid(),
@@ -80,6 +129,13 @@ export default function VariantEditor({
       ),
     );
     onChange(next, nextVariants);
+    // Drop stale selection ids
+    setSelectedVariantIds((prev) => {
+      const live = new Set(nextVariants.map((v) => v.id));
+      const out = new Set<string>();
+      prev.forEach((id) => live.has(id) && out.add(id));
+      return out;
+    });
   };
 
   const addValue = (optIdx: number, label: string) => {
@@ -133,8 +189,15 @@ export default function VariantEditor({
       (v) => !v.optionValueIds.includes(removedId),
     );
     onChange(next, nextVariants);
+    setSelectedVariantIds((prev) => {
+      const live = new Set(nextVariants.map((v) => v.id));
+      const out = new Set<string>();
+      prev.forEach((id) => live.has(id) && out.add(id));
+      return out;
+    });
   };
 
+  // ── Color-value image upload ─────────────────────────
   const handleColorImagesUpload = async (
     optIdx: number,
     valIdx: number,
@@ -169,21 +232,112 @@ export default function VariantEditor({
     });
   };
 
+  // ── Per-variant image upload ────────────────────────
+  const handleVariantImagesUpload = async (
+    variantId: string,
+    files: File[],
+  ) => {
+    if (!files.length) return;
+    setUploadingVariant(variantId);
+    const toastId = toast.loading(`Uploading ${files.length} image(s)...`);
+    try {
+      const urls: string[] = [];
+      for (const file of files) {
+        const optimized = await compressToWebp(file);
+        const url = await uploadImage(optimized, "variants");
+        urls.push(url);
+      }
+      const target = variants.find((v) => v.id === variantId);
+      const merged = [...(target?.images || []), ...urls];
+      onChange(
+        options,
+        variants.map((v) =>
+          v.id === variantId ? { ...v, images: merged } : v,
+        ),
+      );
+      toast.success(`${urls.length} image(s) uploaded`, { id: toastId });
+    } catch (err) {
+      console.error(err);
+      toast.error("Upload failed", { id: toastId });
+    } finally {
+      setUploadingVariant(null);
+    }
+  };
+
+  const removeVariantImage = (variantId: string, imgIdx: number) => {
+    const target = variants.find((v) => v.id === variantId);
+    if (!target) return;
+    const next = (target.images || []).filter((_, i) => i !== imgIdx);
+    onChange(
+      options,
+      variants.map((v) => (v.id === variantId ? { ...v, images: next } : v)),
+    );
+  };
+
+  // ── Bulk upload to selected variants ────────────────
+  const handleBulkImagesUpload = async (files: File[]) => {
+    if (!files.length) return;
+    if (selectedVariantIds.size === 0) {
+      toast.error("Select at least one variant first");
+      return;
+    }
+    setBulkUploading(true);
+    const toastId = toast.loading(
+      `Uploading ${files.length} image(s) to ${selectedVariantIds.size} variant(s)...`,
+    );
+    try {
+      const urls: string[] = [];
+      for (const file of files) {
+        const optimized = await compressToWebp(file);
+        const url = await uploadImage(optimized, "variants");
+        urls.push(url);
+      }
+      onChange(
+        options,
+        variants.map((v) =>
+          selectedVariantIds.has(v.id)
+            ? { ...v, images: [...(v.images || []), ...urls] }
+            : v,
+        ),
+      );
+      toast.success(
+        `Added ${urls.length} image(s) to ${selectedVariantIds.size} variant(s)`,
+        { id: toastId },
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Upload failed", { id: toastId });
+    } finally {
+      setBulkUploading(false);
+    }
+  };
+
+  // ── Generate / regenerate (order-independent, merge-preserving) ──
   const regenerate = () => {
     if (options.length === 0 || options.some((o) => o.values.length === 0)) {
       onChange(options, []);
+      setSelectedVariantIds(new Set());
       return;
     }
+
     const combos = cartesian(options.map((o) => o.values.map((v) => v.id)));
-    const existing = new Map<string, ProductVariant>();
-    variants.forEach((v) =>
-      existing.set(v.optionValueIds.slice().sort().join("|"), v),
-    );
+
+    // Key existing variants by unordered set of their option-value ids
+    const existingByKey = new Map<string, ProductVariant>();
+    variants.forEach((v) => existingByKey.set(comboKey(v.optionValueIds), v));
+
+    let preserved = 0;
+    let created = 0;
 
     const nextVariants: ProductVariant[] = combos.map((ids) => {
-      const key = ids.slice().sort().join("|");
-      const found = existing.get(key);
-      if (found) return found;
+      const key = comboKey(ids);
+      const found = existingByKey.get(key);
+      if (found) {
+        preserved += 1;
+        // Keep everything, but re-align optionValueIds to current option order
+        return { ...found, optionValueIds: ids };
+      }
+      created += 1;
       return {
         id: uid(),
         optionValueIds: ids,
@@ -191,10 +345,25 @@ export default function VariantEditor({
         discountPrice: baseMrp,
         stock: baseStock,
         enabled: true,
+        images: [],
       };
     });
 
     onChange(options, nextVariants);
+
+    // Prune selection
+    const liveIds = new Set(nextVariants.map((v) => v.id));
+    setSelectedVariantIds((prev) => {
+      const out = new Set<string>();
+      prev.forEach((id) => liveIds.has(id) && out.add(id));
+      return out;
+    });
+
+    toast.success(
+      created > 0
+        ? `Generated ${nextVariants.length} variant(s) — ${preserved} kept, ${created} new`
+        : `Regenerated ${nextVariants.length} variant(s) — images preserved`,
+    );
   };
 
   const totalCombos = useMemo(() => {
@@ -202,6 +371,13 @@ export default function VariantEditor({
       return 0;
     return options.reduce((n, o) => n * o.values.length, 1);
   }, [options]);
+
+  const staleCount = useMemo(
+    () => variants.filter((v) => isVariantStale(v, options)).length,
+    [variants, options],
+  );
+
+  const hasUnsavedOptionChanges = variants.length > 0 && staleCount > 0;
 
   const updateVariant = (i: number, patch: Partial<ProductVariant>) => {
     onChange(
@@ -219,10 +395,16 @@ export default function VariantEditor({
 
   const deleteVariant = (i: number) => {
     if (!confirm("Delete this variant?")) return;
+    const id = variants[i].id;
     onChange(
       options,
       variants.filter((_, idx) => idx !== i),
     );
+    setSelectedVariantIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
   const deleteDisabled = () => {
@@ -232,11 +414,18 @@ export default function VariantEditor({
       return;
     }
     if (!confirm(`Delete ${count} disabled variant(s)?`)) return;
-    onChange(
-      options,
-      variants.filter((v) => v.enabled),
-    );
+    const kept = variants.filter((v) => v.enabled);
+    onChange(options, kept);
+    const liveIds = new Set(kept.map((v) => v.id));
+    setSelectedVariantIds((prev) => {
+      const out = new Set<string>();
+      prev.forEach((id) => liveIds.has(id) && out.add(id));
+      return out;
+    });
   };
+
+  const allSelected =
+    variants.length > 0 && selectedVariantIds.size === variants.length;
 
   return (
     <div className="card p-5 space-y-4">
@@ -250,21 +439,15 @@ export default function VariantEditor({
               checked={enabled}
               onChange={(e) => {
                 setEnabled(e.target.checked);
-                if (!e.target.checked) onChange([], []);
+                if (!e.target.checked) {
+                  onChange([], []);
+                  setSelectedVariantIds(new Set());
+                }
               }}
             />
             Enable variants
           </label>
         </div>
-        {enabled && (
-          <button
-            type="button"
-            onClick={regenerate}
-            className="btn-outline text-sm"
-          >
-            Generate variants ({totalCombos})
-          </button>
-        )}
       </div>
 
       {!enabled && (
@@ -276,14 +459,13 @@ export default function VariantEditor({
 
       {enabled && (
         <>
-          {/* ★ OPTIONS */}
+          {/* ── OPTIONS ────────────────────────────────── */}
           <div className="space-y-3">
             {options.map((opt, oi) => (
               <div
                 key={opt.id}
                 className="border rounded-lg bg-gray-50 p-3 flex items-start gap-3"
               >
-                {/* Left: name + type */}
                 <div className="flex items-center gap-2 shrink-0">
                   <input
                     className="input py-1.5 text-sm"
@@ -307,7 +489,6 @@ export default function VariantEditor({
                   </select>
                 </div>
 
-                {/* Middle: values */}
                 <div className="flex flex-wrap items-start gap-3 flex-1 min-w-0">
                   {opt.values.map((val, vi) => {
                     const uploading = uploadingKey === `${oi}-${vi}`;
@@ -317,7 +498,6 @@ export default function VariantEditor({
                         key={val.id}
                         className="flex flex-col gap-2 bg-white border border-gray-200 rounded-lg p-2.5 min-w-[140px]"
                       >
-                        {/* Row 1: color swatch + label + remove */}
                         <div className="flex items-center gap-2">
                           {opt.type === "color" && (
                             <input
@@ -352,7 +532,6 @@ export default function VariantEditor({
                           </button>
                         </div>
 
-                        {/* Row 2: image thumbnails + big upload tile (color only) */}
                         {opt.type === "color" && (
                           <div className="flex flex-wrap items-start gap-2">
                             {imgs.map((url, imgIdx) => (
@@ -365,15 +544,11 @@ export default function VariantEditor({
                                   alt=""
                                   className="w-full h-full object-cover"
                                 />
-
-                                {/* Main badge on first image */}
                                 {imgIdx === 0 && (
                                   <span className="absolute top-1 left-1 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm">
                                     Main
                                   </span>
                                 )}
-
-                                {/* Remove button */}
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -387,7 +562,6 @@ export default function VariantEditor({
                               </div>
                             ))}
 
-                            {/* Big upload tile */}
                             <label
                               className={`w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50 flex flex-col items-center justify-center cursor-pointer bg-gray-50 shrink-0 transition-colors ${
                                 uploading ? "opacity-60 cursor-wait" : ""
@@ -429,11 +603,9 @@ export default function VariantEditor({
                     );
                   })}
 
-                  {/* Add value pill */}
                   <AddValueInput onAdd={(label) => addValue(oi, label)} />
                 </div>
 
-                {/* Right: remove option */}
                 <button
                   type="button"
                   onClick={() => removeOption(oi)}
@@ -454,12 +626,54 @@ export default function VariantEditor({
             </button>
           </div>
 
-          {/* VARIANTS TABLE */}
+          {/* ── STALE BANNER (options changed after generate) ── */}
+          {hasUnsavedOptionChanges && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex flex-wrap items-center gap-3">
+              <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+              <p className="text-xs text-amber-800 flex-1 min-w-[200px]">
+                {staleCount} variant(s) are out of date because options changed
+                after generation. Regenerate to apply the new option to every
+                variant — existing images, price, and stock will be preserved.
+              </p>
+              <button
+                type="button"
+                onClick={regenerate}
+                className="btn-primary text-xs flex items-center gap-1.5"
+              >
+                <RefreshCw size={12} /> Regenerate now
+              </button>
+            </div>
+          )}
+
+          {/* ── GENERATE VARIANTS ──────────────────────── */}
+          <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={regenerate}
+              className="btn-primary text-sm flex items-center gap-2"
+            >
+              <RefreshCw size={14} />
+              {variants.length ? "Regenerate variants" : "Generate variants"} (
+              {totalCombos})
+            </button>
+            <p className="text-xs text-gray-500">
+              {variants.length
+                ? "Existing variants keep their images, price, and stock — matched by option-value combination."
+                : "Creates every combination from your options. After generating, upload images for each variant below."}
+            </p>
+          </div>
+
+          {/* ── VARIANTS TABLE ─────────────────────────── */}
           {variants.length > 0 && (
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-3">
                 <p className="text-sm font-medium">
                   {variants.length} variant(s)
+                  {staleCount > 0 && (
+                    <span className="ml-2 text-[10px] font-semibold uppercase bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">
+                      {staleCount} stale
+                    </span>
+                  )}
                 </p>
                 <button
                   type="button"
@@ -493,10 +707,85 @@ export default function VariantEditor({
                 )}
               </div>
 
+              {/* BULK IMAGE UPLOAD BAR */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={toggleSelectAll}
+                  className="flex items-center gap-1.5 text-xs font-medium text-blue-800 hover:text-blue-900"
+                >
+                  {allSelected ? (
+                    <CheckSquare size={14} />
+                  ) : (
+                    <Square size={14} />
+                  )}
+                  {allSelected ? "Unselect all" : "Select all"}
+                </button>
+
+                <span className="text-xs text-blue-700">
+                  {selectedVariantIds.size > 0
+                    ? `${selectedVariantIds.size} selected`
+                    : "No variants selected"}
+                </span>
+
+                {selectedVariantIds.size > 0 && (
+                  <>
+                    <label
+                      className={`btn-outline text-xs flex items-center gap-1.5 cursor-pointer bg-white ${
+                        bulkUploading ? "opacity-60 cursor-wait" : ""
+                      }`}
+                    >
+                      {bulkUploading ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <ImagePlus size={12} />
+                      )}
+                      {bulkUploading
+                        ? "Uploading..."
+                        : `Add images to ${selectedVariantIds.size} selected`}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        disabled={bulkUploading}
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []);
+                          if (files.length) handleBulkImagesUpload(files);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={clearSelection}
+                      className="text-xs text-gray-500 underline ml-auto"
+                    >
+                      Clear selection
+                    </button>
+                  </>
+                )}
+              </div>
+
               <div className="overflow-x-auto border rounded-lg bg-white">
                 <table className="text-sm min-w-full">
                   <thead className="bg-gray-100">
                     <tr>
+                      <th className="text-center px-2 py-2 font-medium whitespace-nowrap w-10">
+                        <button
+                          type="button"
+                          onClick={toggleSelectAll}
+                          title={allSelected ? "Unselect all" : "Select all"}
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          {allSelected ? (
+                            <CheckSquare size={14} />
+                          ) : (
+                            <Square size={14} />
+                          )}
+                        </button>
+                      </th>
                       {options.map((o) => (
                         <th
                           key={o.id}
@@ -505,6 +794,9 @@ export default function VariantEditor({
                           {o.name || "—"}
                         </th>
                       ))}
+                      <th className="text-left px-3 py-2 font-medium whitespace-nowrap">
+                        Images
+                      </th>
                       <th className="text-left px-3 py-2 font-medium whitespace-nowrap">
                         MRP (₹)
                       </th>
@@ -526,113 +818,199 @@ export default function VariantEditor({
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {variants.map((v, vi) => (
-                      <tr
-                        key={v.id}
-                        className={v.enabled ? "" : "opacity-50 bg-gray-50"}
-                      >
-                        {options.map((o, i) => {
-                          const valId = v.optionValueIds[i];
-                          const val = o.values.find((x) => x.id === valId);
-                          const isColor = o.type === "color";
-                          return (
-                            <td
-                              key={o.id}
-                              className="px-3 py-2 whitespace-nowrap"
+                    {variants.map((v, vi) => {
+                      const isUploading = uploadingVariant === v.id;
+                      const vImgs = v.images || [];
+                      const isSelected = selectedVariantIds.has(v.id);
+                      const stale = isVariantStale(v, options);
+                      return (
+                        <tr
+                          key={v.id}
+                          className={
+                            (v.enabled ? "" : "opacity-50 bg-gray-50") +
+                            (isSelected ? " bg-blue-50/60" : "") +
+                            (stale
+                              ? " outline outline-1 outline-amber-300"
+                              : "")
+                          }
+                        >
+                          <td className="px-2 py-1.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => toggleSelectVariant(v.id)}
+                              className="text-blue-600 hover:text-blue-800"
+                              title="Select for bulk actions"
                             >
-                              <div className="flex items-center gap-2">
-                                {isColor && val?.images?.[0] && (
+                              {isSelected ? (
+                                <CheckSquare size={14} />
+                              ) : (
+                                <Square size={14} />
+                              )}
+                            </button>
+                          </td>
+                          {options.map((o, i) => {
+                            const valId = v.optionValueIds[i];
+                            const val = o.values.find((x) => x.id === valId);
+                            const isColor = o.type === "color";
+                            return (
+                              <td
+                                key={o.id}
+                                className="px-3 py-2 whitespace-nowrap"
+                              >
+                                <div className="flex items-center gap-2">
+                                  {isColor && val?.images?.[0] && (
+                                    <img
+                                      src={val.images[0]}
+                                      alt={val.label}
+                                      className="w-9 h-9 rounded object-cover border border-gray-200"
+                                    />
+                                  )}
+                                  {isColor && !val?.images?.[0] && (
+                                    <span className="w-4 h-4 rounded-full border border-gray-300 bg-gray-100" />
+                                  )}
+                                  <span>{val?.label || "?"}</span>
+                                  {isColor &&
+                                    (val?.images?.length || 0) > 1 && (
+                                      <span className="text-[10px] text-gray-400">
+                                        +{(val?.images?.length || 0) - 1}
+                                      </span>
+                                    )}
+                                </div>
+                              </td>
+                            );
+                          })}
+
+                          {/* Per-variant images */}
+                          <td className="px-2 py-1.5">
+                            <div className="flex items-center gap-1.5">
+                              {vImgs.map((url, imgIdx) => (
+                                <div
+                                  key={imgIdx}
+                                  className="relative group w-9 h-9 rounded overflow-hidden border border-gray-200 shrink-0"
+                                >
                                   <img
-                                    src={val.images[0]}
-                                    alt={val.label}
-                                    className="w-9 h-9 rounded object-cover border border-gray-200"
+                                    src={url}
+                                    alt=""
+                                    className="w-full h-full object-cover"
                                   />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      removeVariantImage(v.id, imgIdx)
+                                    }
+                                    className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition shadow"
+                                    title="Remove"
+                                  >
+                                    <X size={9} />
+                                  </button>
+                                </div>
+                              ))}
+                              <label
+                                className={`w-9 h-9 rounded border-2 border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50 flex items-center justify-center cursor-pointer text-gray-400 hover:text-blue-500 shrink-0 transition ${
+                                  isUploading ? "opacity-60 cursor-wait" : ""
+                                }`}
+                                title="Upload variant image(s)"
+                              >
+                                {isUploading ? (
+                                  <Loader2
+                                    size={14}
+                                    className="animate-spin text-blue-600"
+                                  />
+                                ) : (
+                                  <ImagePlus size={14} />
                                 )}
-                                {isColor && !val?.images?.[0] && (
-                                  <span className="w-4 h-4 rounded-full border border-gray-300 bg-gray-100" />
-                                )}
-                                <span>{val?.label || "?"}</span>
-                                {isColor && (val?.images?.length || 0) > 1 && (
-                                  <span className="text-[10px] text-gray-400">
-                                    +{(val?.images?.length || 0) - 1}
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                          );
-                        })}
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="number"
-                            className="w-24 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            value={v.discountPrice ?? ""}
-                            placeholder="MRP"
-                            onChange={(e) =>
-                              updateVariant(vi, {
-                                discountPrice: e.target.value
-                                  ? Number(e.target.value)
-                                  : undefined,
-                              })
-                            }
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="number"
-                            className="w-24 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            value={v.price}
-                            placeholder="Price"
-                            onChange={(e) =>
-                              updateVariant(vi, {
-                                price: Number(e.target.value) || 0,
-                              })
-                            }
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="number"
-                            className="w-20 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            value={v.stock}
-                            onChange={(e) =>
-                              updateVariant(vi, {
-                                stock: Number(e.target.value) || 0,
-                              })
-                            }
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            className="w-28 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            value={v.sku || ""}
-                            onChange={(e) =>
-                              updateVariant(vi, { sku: e.target.value })
-                            }
-                          />
-                        </td>
-                        <td className="px-2 py-1.5 text-center">
-                          <input
-                            type="checkbox"
-                            checked={v.enabled}
-                            onChange={(e) =>
-                              updateVariant(vi, {
-                                enabled: e.target.checked,
-                              })
-                            }
-                          />
-                        </td>
-                        <td className="px-2 py-1.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => deleteVariant(vi)}
-                            className="text-red-500 hover:text-red-700 p-1"
-                            title="Delete variant"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  className="hidden"
+                                  disabled={isUploading}
+                                  onChange={(e) => {
+                                    const files = Array.from(
+                                      e.target.files || [],
+                                    );
+                                    if (files.length)
+                                      handleVariantImagesUpload(v.id, files);
+                                    e.target.value = "";
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          </td>
+
+                          <td className="px-2 py-1.5">
+                            <input
+                              type="number"
+                              className="w-24 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              value={v.discountPrice ?? ""}
+                              placeholder="MRP"
+                              onChange={(e) =>
+                                updateVariant(vi, {
+                                  discountPrice: e.target.value
+                                    ? Number(e.target.value)
+                                    : undefined,
+                                })
+                              }
+                            />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input
+                              type="number"
+                              className="w-24 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              value={v.price}
+                              placeholder="Price"
+                              onChange={(e) =>
+                                updateVariant(vi, {
+                                  price: Number(e.target.value) || 0,
+                                })
+                              }
+                            />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input
+                              type="number"
+                              className="w-20 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              value={v.stock}
+                              onChange={(e) =>
+                                updateVariant(vi, {
+                                  stock: Number(e.target.value) || 0,
+                                })
+                              }
+                            />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input
+                              className="w-28 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              value={v.sku || ""}
+                              onChange={(e) =>
+                                updateVariant(vi, { sku: e.target.value })
+                              }
+                            />
+                          </td>
+                          <td className="px-2 py-1.5 text-center">
+                            <input
+                              type="checkbox"
+                              checked={v.enabled}
+                              onChange={(e) =>
+                                updateVariant(vi, {
+                                  enabled: e.target.checked,
+                                })
+                              }
+                            />
+                          </td>
+                          <td className="px-2 py-1.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => deleteVariant(vi)}
+                              className="text-red-500 hover:text-red-700 p-1"
+                              title="Delete variant"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -640,7 +1018,8 @@ export default function VariantEditor({
               <p className="text-xs text-gray-400 flex items-center gap-1">
                 <AlertTriangle size={12} />
                 MRP is the original price; Price is what the customer pays.
-                Turning off a variant hides it from the storefront.
+                Turning off a variant hides it from the storefront. Use the
+                checkboxes to bulk-upload the same images to multiple variants.
               </p>
             </div>
           )}

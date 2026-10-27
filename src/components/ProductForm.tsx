@@ -34,6 +34,7 @@ import {
   ChevronDown,
   ChevronRight,
   Sparkles,
+  ImagePlus,
 } from "lucide-react";
 import CreatableCombobox from "./CreatableCombobox";
 import VariantEditor from "./VariantEditor";
@@ -121,8 +122,8 @@ export default function ProductForm({ initialData }: Props) {
         (o) =>
           o.type === "color" &&
           o.values.some((v) => (v.images?.length || 0) > 0),
-      ),
-    [options],
+      ) || variants.some((v) => (v.images?.length || 0) > 0),
+    [options, variants],
   );
 
   useEffect(() => {
@@ -270,13 +271,10 @@ export default function ProductForm({ initialData }: Props) {
   const removeImage = (idx: number) =>
     setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== idx) }));
 
-  const addSpec = () =>
+  const addSpec = (group = "General") =>
     setForm((f) => ({
       ...f,
-      specifications: [
-        ...f.specifications,
-        { key: "", value: "", group: "General" },
-      ],
+      specifications: [...f.specifications, { key: "", value: "", group }],
     }));
 
   const updateSpec = (i: number, field: keyof SpecValue, value: string) =>
@@ -293,7 +291,7 @@ export default function ProductForm({ initialData }: Props) {
       specifications: f.specifications.filter((_, idx) => idx !== i),
     }));
 
-  // ===== Highlights (manual) =====
+  // ===== Highlights =====
   const addHighlight = () =>
     setForm((f) => ({ ...f, highlights: [...f.highlights, ""] }));
 
@@ -324,13 +322,15 @@ export default function ProductForm({ initialData }: Props) {
     const enabledVariants = variants.filter((v) => v.enabled);
     const hasVariantsLocal = options.length > 0 && variants.length > 0;
 
-    const hasAnyVariantImages = options.some(
-      (o) =>
-        o.type === "color" && o.values.some((v) => (v.images?.length || 0) > 0),
-    );
+    const hasAnyVariantImages =
+      options.some(
+        (o) =>
+          o.type === "color" &&
+          o.values.some((v) => (v.images?.length || 0) > 0),
+      ) || variants.some((v) => (v.images?.length || 0) > 0);
 
     if (form.images.length === 0 && !hasAnyVariantImages) {
-      return toast.error("Add at least one image, or upload color images");
+      return toast.error("Add at least one image, or upload variant images");
     }
 
     const missing = form.specifications.find(
@@ -666,7 +666,7 @@ export default function ProductForm({ initialData }: Props) {
             </div>
           </div>
 
-          {/* ⭐ MANUAL HIGHLIGHTS */}
+          {/* MANUAL HIGHLIGHTS */}
           <div className="card p-5 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -683,9 +683,8 @@ export default function ProductForm({ initialData }: Props) {
             </div>
 
             <p className="text-xs text-gray-500">
-              Short bullet points shown on the product page (e.g. “5000 mAh
-              battery”, “6.7-inch AMOLED display”). Add, edit, or remove them
-              freely — they are independent of the specifications below.
+              Short bullet points shown on the product page (e.g. "5000 mAh
+              battery", "6.7-inch AMOLED display").
             </p>
 
             {form.highlights.length === 0 ? (
@@ -751,10 +750,6 @@ export default function ProductForm({ initialData }: Props) {
                     <b>Total Sold:</b> {form.totalSold || 0}
                   </li>
                 </ul>
-                <p className="text-[11px] text-blue-600 mt-2">
-                  Edit each variant in the section below to change price / MRP /
-                  stock.
-                </p>
               </div>
             ) : (
               <>
@@ -771,9 +766,6 @@ export default function ProductForm({ initialData }: Props) {
                         setForm({ ...form, mrp: e.target.value })
                       }
                     />
-                    <p className="text-[10px] text-gray-400 mt-1">
-                      Original / list price
-                    </p>
                   </div>
                   <div>
                     <label className="text-sm text-gray-600">Price (₹) *</label>
@@ -787,9 +779,6 @@ export default function ProductForm({ initialData }: Props) {
                         setForm({ ...form, price: e.target.value })
                       }
                     />
-                    <p className="text-[10px] text-gray-400 mt-1">
-                      What the customer pays
-                    </p>
                   </div>
                   <div>
                     <label className="text-sm text-gray-600">Stock *</label>
@@ -825,7 +814,7 @@ export default function ProductForm({ initialData }: Props) {
             )}
           </div>
 
-          {/* VARIANTS */}
+          {/* VARIANTS — VariantEditor handles per-variant images + generate at bottom */}
           <VariantEditor
             basePrice={toNum(form.price) || 0}
             baseMrp={toNum(form.mrp) || undefined}
@@ -920,28 +909,30 @@ export default function ProductForm({ initialData }: Props) {
             <div className="card p-5 bg-blue-50 border border-blue-200">
               <p className="text-sm text-blue-800">
                 <b>Images are provided by the variants.</b> The storefront
-                gallery will show each color's uploaded images.
+                gallery will show each variant's uploaded images.
               </p>
             </div>
           )}
 
-          {/* SPECIFICATIONS (grouped) */}
+          {/* SPECIFICATIONS (grouped, per-group "Add field") */}
           <div className="card p-5 space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="font-bold text-lg">Specifications</h2>
-              <button
-                type="button"
-                onClick={addSpec}
-                className="text-blue-600 text-sm flex items-center gap-1"
-              >
-                <Plus size={14} /> Add custom field
-              </button>
             </div>
 
-            {form.specifications.length === 0 ? (
-              <p className="text-sm text-gray-500">
-                No specification fields configured for this category path.
-              </p>
+            {groupedFormSpecs.length === 0 ? (
+              <div className="space-y-2">
+                <p className="text-sm text-gray-500">
+                  No specification fields configured for this category path.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => addSpec("General")}
+                  className="text-blue-600 text-sm flex items-center gap-1"
+                >
+                  <Plus size={14} /> Add a custom field
+                </button>
+              </div>
             ) : (
               <div className="space-y-4">
                 {groupedFormSpecs.map(({ group, items }) => (
@@ -951,6 +942,7 @@ export default function ProductForm({ initialData }: Props) {
                     items={items}
                     onUpdate={updateSpec}
                     onRemove={removeSpec}
+                    onAddField={() => addSpec(group)}
                   />
                 ))}
               </div>
@@ -981,66 +973,84 @@ export default function ProductForm({ initialData }: Props) {
   );
 }
 
-// ===== Grouped spec block =====
+// ===== Grouped spec block with per-group "Add field" =====
 function SpecGroupBlock({
   group,
   items,
   onUpdate,
   onRemove,
+  onAddField,
 }: {
   group: string;
   items: { index: number; spec: SpecValue }[];
   onUpdate: (i: number, field: keyof SpecValue, value: string) => void;
   onRemove: (i: number) => void;
+  onAddField: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
     <div className="border border-gray-200 rounded-lg bg-white">
-      <button
-        type="button"
-        onClick={() => setCollapsed((c) => !c)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-t-lg"
-      >
-        <span className="flex items-center gap-2 font-medium text-sm">
+      <div className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 rounded-t-lg">
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          className="flex items-center gap-2 font-medium text-sm hover:opacity-80"
+        >
           {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
           {group}
-        </span>
-        <span className="text-xs text-gray-400">{items.length} field(s)</span>
-      </button>
+          <span className="text-xs text-gray-400 font-normal">
+            ({items.length})
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={onAddField}
+          className="text-blue-600 text-xs flex items-center gap-1 hover:text-blue-800"
+          title={`Add a field under "${group}"`}
+        >
+          <Plus size={13} /> Add field
+        </button>
+      </div>
 
       {!collapsed && (
         <div className="p-3 space-y-2">
-          {items.map(({ index, spec }) => (
-            <div key={index} className="flex gap-2 items-center">
-              <input
-                placeholder="Key (e.g. Brand)"
-                className="input"
-                value={spec.key}
-                onChange={(e) => onUpdate(index, "key", e.target.value)}
-              />
-              <input
-                placeholder={spec.placeholder || "Value"}
-                className={`input ${
-                  spec.required && !spec.value.trim() ? "border-red-300" : ""
-                }`}
-                value={spec.value}
-                onChange={(e) => onUpdate(index, "value", e.target.value)}
-              />
-              {spec.required && (
-                <span className="text-[10px] text-red-500 font-medium whitespace-nowrap">
-                  Required
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => onRemove(index)}
-                className="text-red-500 hover:text-red-700"
-              >
-                <Trash2 size={18} />
-              </button>
-            </div>
-          ))}
+          {items.length === 0 ? (
+            <p className="text-xs text-gray-400 px-1">
+              No fields yet — click "Add field" above.
+            </p>
+          ) : (
+            items.map(({ index, spec }) => (
+              <div key={index} className="flex gap-2 items-center">
+                <input
+                  placeholder="Key (e.g. Brand)"
+                  className="input"
+                  value={spec.key}
+                  onChange={(e) => onUpdate(index, "key", e.target.value)}
+                />
+                <input
+                  placeholder={spec.placeholder || "Value"}
+                  className={`input ${
+                    spec.required && !spec.value.trim() ? "border-red-300" : ""
+                  }`}
+                  value={spec.value}
+                  onChange={(e) => onUpdate(index, "value", e.target.value)}
+                />
+                {spec.required && (
+                  <span className="text-[10px] text-red-500 font-medium whitespace-nowrap">
+                    Required
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onRemove(index)}
+                  className="text-red-500 hover:text-red-700"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>
