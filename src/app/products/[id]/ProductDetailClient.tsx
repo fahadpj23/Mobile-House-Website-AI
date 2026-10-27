@@ -266,6 +266,8 @@ function SimilarProducts({
       setLoading(true);
       try {
         // ⚠️ REPLACE THIS MOCK FETCH WITH YOUR ACTUAL API CALL
+        // e.g. const all = await getProducts();
+        //      setProducts(all.filter(p => p.category === category && p.id !== currentProductId));
         await new Promise((resolve) => setTimeout(resolve, 800));
         setProducts([]);
       } catch (error) {
@@ -276,7 +278,7 @@ function SimilarProducts({
     };
 
     if (category) fetchSimilar();
-  }, [category]);
+  }, [category, currentProductId]);
 
   if (loading) {
     return (
@@ -305,30 +307,32 @@ function SimilarProducts({
         Similar Products
       </h2>
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        {products.map((p) => (
-          <Link key={p.id} href={`/products/${p.id}`} className="group">
-            <div className="aspect-square bg-gray-50 rounded-lg overflow-hidden relative mb-3">
-              <img
-                src={p.images?.[0] || "/placeholder.png"}
-                alt={p.name}
-                className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform"
-              />
-            </div>
-            <h3 className="text-sm font-medium text-gray-900 line-clamp-1">
-              {p.name}
-            </h3>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-sm font-bold text-gray-900">
-                ₹{p.price.toLocaleString()}
-              </span>
-              {p.discountPrice && (
-                <span className="text-xs text-gray-400 line-through">
-                  ₹{p.discountPrice.toLocaleString()}
+        {products.map((p) =>
+          p.id ? (
+            <Link key={p.id} href={`/products/${p.id}`} className="group">
+              <div className="aspect-square bg-gray-50 rounded-lg overflow-hidden relative mb-3">
+                <img
+                  src={p.images?.[0] || "/placeholder.png"}
+                  alt={p.name}
+                  className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform"
+                />
+              </div>
+              <h3 className="text-sm font-medium text-gray-900 line-clamp-1">
+                {p.name}
+              </h3>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-sm font-bold text-gray-900">
+                  ₹{p.price.toLocaleString()}
                 </span>
-              )}
-            </div>
-          </Link>
-        ))}
+                {p.discountPrice && (
+                  <span className="text-xs text-gray-400 line-through">
+                    ₹{p.discountPrice.toLocaleString()}
+                  </span>
+                )}
+              </div>
+            </Link>
+          ) : null,
+        )}
       </div>
     </div>
   );
@@ -1286,7 +1290,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                 {/* Similar Products */}
                 <SimilarProducts
                   category={product.category || "general"}
-                  currentProductId={product.id}
+                  currentProductId={product.id || ""}
                 />
               </>
             )}
