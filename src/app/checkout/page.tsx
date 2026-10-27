@@ -1,3 +1,4 @@
+// app/checkout/page.tsx
 "use client";
 import { useState } from "react";
 import { useCart } from "@/components/CartProvider";
@@ -6,13 +7,17 @@ import { createOrder } from "@/lib/firestore";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { PaymentMethod } from "@/lib/types";
+import { ShieldCheck, Truck, Lock } from "lucide-react";
 
 export default function CheckoutPage() {
   const { items, total, clearCart } = useCart();
   const { user } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [payment, setPayment] = useState<PaymentMethod>("cod");
+
+  // Fixed to COD only as requested
+  const payment: PaymentMethod = "cod";
+
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -38,9 +43,9 @@ export default function CheckoutPage() {
         userId: user.uid,
         items: items.map((i) => {
           const v = i.product.variants?.find((x) => x.id === i.variantId);
-          const unitPrice = v
-            ? v.discountPrice || v.price
-            : i.product.discountPrice || i.product.price;
+
+          // ✅ USING ACTUAL PRICE INSTEAD OF MRP
+          const unitPrice = v ? v.price : i.product.price;
 
           // Pick color image as thumbnail if available
           let image = i.product.images[0] || "";
@@ -88,151 +93,214 @@ export default function CheckoutPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">Checkout</h1>
-      <form onSubmit={handleSubmit} className="grid md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 space-y-4">
-          <div className="card p-5">
-            <h2 className="font-bold mb-3">Shipping Information</h2>
-            <div className="grid sm:grid-cols-2 gap-3">
-              <input
-                required
-                placeholder="Full Name"
-                className="input"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-              />
-              <input
-                required
-                placeholder="Phone"
-                className="input"
-                value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              />
-              <input
-                required
-                placeholder="City"
-                className="input"
-                value={form.city}
-                onChange={(e) => setForm({ ...form, city: e.target.value })}
-              />
-              <input
-                placeholder="Notes (optional)"
-                className="input"
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              />
-              <textarea
-                required
-                placeholder="Full Address"
-                className="input sm:col-span-2"
-                rows={3}
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-              />
+    <div className="max-w-6xl mx-auto px-4 py-10 md:py-16">
+      <div className="mb-8">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">
+          Checkout
+        </h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Please enter your shipping details to complete the order.
+        </p>
+      </div>
+
+      <form
+        onSubmit={handleSubmit}
+        className="grid lg:grid-cols-12 gap-8 items-start"
+      >
+        {/* LEFT COLUMN: FORM */}
+        <div className="lg:col-span-7 space-y-6">
+          {/* Shipping Info */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+            <h2 className="font-bold text-lg mb-4 text-gray-900 flex items-center gap-2">
+              <Truck size={18} className="text-gray-400" /> Shipping Information
+            </h2>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-600">
+                  Full Name *
+                </label>
+                <input
+                  required
+                  placeholder="e.g. John Doe"
+                  className="w-full h-11 px-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-600">
+                  Phone *
+                </label>
+                <input
+                  required
+                  placeholder="e.g. +91 9876543210"
+                  className="w-full h-11 px-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="text-xs font-semibold text-gray-600">
+                  City *
+                </label>
+                <input
+                  required
+                  placeholder="e.g. Mumbai"
+                  className="w-full h-11 px-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  value={form.city}
+                  onChange={(e) => setForm({ ...form, city: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="text-xs font-semibold text-gray-600">
+                  Full Address *
+                </label>
+                <textarea
+                  required
+                  placeholder="House no, Street, Area..."
+                  className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 min-h-[100px]"
+                  value={form.address}
+                  onChange={(e) =>
+                    setForm({ ...form, address: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="text-xs font-semibold text-gray-600">
+                  Notes (optional)
+                </label>
+                <input
+                  placeholder="Any delivery instructions?"
+                  className="w-full h-11 px-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+              </div>
             </div>
           </div>
 
-          <div className="card p-5">
-            <h2 className="font-bold mb-3">Payment Method</h2>
-            <div className="space-y-2">
-              {[
-                { id: "cod", label: "Cash on Delivery" },
-                { id: "card", label: "Card Payment" },
-                { id: "bkash", label: "bKash" },
-                { id: "nagad", label: "Nagad" },
-              ].map((m) => (
-                <label
-                  key={m.id}
-                  className="flex items-center gap-2 p-3 border rounded-lg cursor-pointer hover:bg-blue-50"
-                >
-                  <input
-                    type="radio"
-                    name="payment"
-                    checked={payment === m.id}
-                    onChange={() => setPayment(m.id as PaymentMethod)}
-                  />
-                  <span>{m.label}</span>
-                </label>
-              ))}
+          {/* Payment Method (Locked to COD) */}
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+            <h2 className="font-bold text-lg mb-4 text-gray-900 flex items-center gap-2">
+              <ShieldCheck size={18} className="text-gray-400" /> Payment Method
+            </h2>
+
+            <div className="flex items-center gap-3 p-4 border-2 border-gray-900 bg-gray-50 rounded-xl">
+              <div className="w-5 h-5 rounded-full border-2 border-gray-900 flex items-center justify-center">
+                <div className="w-2.5 h-2.5 bg-gray-900 rounded-full" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-bold text-gray-900">
+                  Cash on Delivery
+                </p>
+                <p className="text-xs text-gray-500">
+                  Pay with cash when your order is delivered.
+                </p>
+              </div>
             </div>
+
+            <p className="text-xs text-gray-400 mt-4 flex items-center gap-1">
+              <Lock size={12} /> Online payments are currently unavailable.
+            </p>
           </div>
         </div>
 
-        <div className="card p-5 h-fit">
-          <h2 className="font-bold text-lg mb-4">Your Order</h2>
-          <div className="space-y-3 max-h-80 overflow-auto mb-4">
-            {items.map((i) => {
-              const key = `${i.product.id}__${i.variantId || "base"}`;
-              const v = i.product.variants?.find((x) => x.id === i.variantId);
-              const unit = v
-                ? v.discountPrice || v.price
-                : i.product.discountPrice || i.product.price;
+        {/* RIGHT COLUMN: ORDER SUMMARY */}
+        <div className="lg:col-span-5 w-full">
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm sticky top-24">
+            <h2 className="font-bold text-lg mb-5 text-gray-900">
+              Order Summary
+            </h2>
 
-              let image = i.product.images[0] || "";
-              if (v && i.product.options) {
-                const colorOpt = i.product.options.find(
-                  (o) => o.type === "color",
-                );
-                if (colorOpt) {
-                  const colorIdx = i.product.options.findIndex(
-                    (o) => o.id === colorOpt.id,
+            <div className="space-y-4 max-h-[320px] overflow-y-auto pr-2 custom-scrollbar mb-6">
+              {items.map((i) => {
+                const key = `${i.product.id}__${i.variantId || "base"}`;
+                const v = i.product.variants?.find((x) => x.id === i.variantId);
+
+                // ✅ USING ACTUAL PRICE INSTEAD OF MRP
+                const unit = v ? v.price : i.product.price;
+
+                let image = i.product.images[0] || "";
+                if (v && i.product.options) {
+                  const colorOpt = i.product.options.find(
+                    (o) => o.type === "color",
                   );
-                  const colorValId = v.optionValueIds[colorIdx];
-                  const colorImg = colorOpt.values.find(
-                    (cv) => cv.id === colorValId,
-                  )?.images?.[0];
-                  if (colorImg) image = colorImg;
+                  if (colorOpt) {
+                    const colorIdx = i.product.options.findIndex(
+                      (o) => o.id === colorOpt.id,
+                    );
+                    const colorValId = v.optionValueIds[colorIdx];
+                    const colorImg = colorOpt.values.find(
+                      (cv) => cv.id === colorValId,
+                    )?.images?.[0];
+                    if (colorImg) image = colorImg;
+                  }
                 }
-              }
 
-              return (
-                <div key={key} className="flex gap-3 text-sm">
-                  {image && (
-                    <img
-                      src={image}
-                      alt=""
-                      className="w-12 h-12 rounded object-cover border shrink-0"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="line-clamp-2">{i.product.name}</p>
-                    {i.variantLabel && (
-                      <p className="text-[11px] text-gray-500">
-                        {i.variantLabel}
+                return (
+                  <div
+                    key={key}
+                    className="flex gap-3 py-2 border-b border-gray-100 last:border-0"
+                  >
+                    <div className="w-14 h-14 rounded-lg border border-gray-200 bg-gray-50 overflow-hidden shrink-0">
+                      {image && (
+                        <img
+                          src={image}
+                          alt=""
+                          className="w-full h-full object-contain p-1"
+                        />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                      <p className="text-[13px] font-semibold text-gray-900 line-clamp-1">
+                        {i.product.name}
                       </p>
-                    )}
-                    <p className="text-[11px] text-gray-500">
-                      ₹{unit} × {i.quantity}
-                    </p>
+                      {i.variantLabel && (
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          {i.variantLabel}
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between mt-1">
+                        <p className="text-[12px] text-gray-500">
+                          Qty: {i.quantity}
+                        </p>
+                        <p className="text-[13px] font-bold text-gray-900">
+                          ₹{unit * i.quantity}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <span className="font-medium whitespace-nowrap">
-                    ₹{unit * i.quantity}
-                  </span>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+
+            <div className="space-y-2.5 text-sm border-t border-gray-100 pt-4">
+              <div className="flex justify-between text-gray-500">
+                <span>Subtotal</span>
+                <span className="text-gray-900">₹{total}</span>
+              </div>
+              <div className="flex justify-between text-gray-500">
+                <span>Shipping</span>
+                <span className="text-green-600 font-medium">Free</span>
+              </div>
+              <div className="flex justify-between font-bold text-lg pt-2 border-t border-gray-100">
+                <span className="text-gray-900">Total</span>
+                <span className="text-gray-900">₹{total}</span>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className={`w-full h-12 mt-6 rounded-xl text-sm font-bold transition-all shadow-md flex items-center justify-center ${
+                loading
+                  ? "bg-gray-400 text-white cursor-not-allowed"
+                  : "bg-gray-900 hover:bg-black text-white active:scale-[0.98]"
+              }`}
+            >
+              {loading ? "Placing Order..." : "Place Order"}
+            </button>
           </div>
-          <hr className="my-3" />
-          <div className="flex justify-between text-sm mb-1">
-            <span>Subtotal</span>
-            <span>₹{total}</span>
-          </div>
-          <div className="flex justify-between text-sm mb-3">
-            <span>Shipping</span>
-            <span>Free</span>
-          </div>
-          <div className="flex justify-between font-bold text-lg mb-4">
-            <span>Total</span>
-            <span className="text-blue-600">₹{total}</span>
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-primary w-full disabled:bg-gray-400"
-          >
-            {loading ? "Placing..." : "Place Order"}
-          </button>
         </div>
       </form>
     </div>

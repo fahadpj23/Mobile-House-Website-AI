@@ -592,6 +592,13 @@ export default function ProductDetailClient({ product }: { product: Product }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeVariant?.id, gallery.length]);
 
+  // ✅ Force scroll to start on initial mobile load
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ left: 0, behavior: "instant" });
+    }
+  }, []);
+
   const safeActiveImg = Math.min(activeImg, gallery.length - 1);
   const currentImage = gallery[safeActiveImg] || "/placeholder.png";
 
@@ -785,7 +792,8 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                           <img
                             src={img}
                             alt={`${displayTitle} - ${i + 1}`}
-                            className="w-full h-full object-contain cursor-zoom-in"
+                            // ✅ Added max-w-none to prevent auto-scroll bug
+                            className="w-full h-full max-w-none object-contain cursor-zoom-in"
                             onClick={() => setIsZoomOpen(true)}
                           />
                         )}
