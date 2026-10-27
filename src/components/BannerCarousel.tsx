@@ -95,7 +95,7 @@ export default function BannerCarousel({ banners }: { banners: Banner[] }) {
   return (
     <section
       className="
-        relative w-full overflow-hidden bg-gray-100
+        relative w-full overflow-hidden bg-gray-100 mb-4 md:mb-8
         h-[160px] sm:h-[220px] md:h-[280px] lg:h-[340px] xl:h-[400px] 2xl:h-[420px]
       "
     >

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Product, SpecValue } from "@/lib/types";
 import { useCart } from "@/components/CartProvider";
 import toast from "react-hot-toast";
+import Link from "next/link";
 import {
   ShoppingCart,
   Truck,
@@ -154,11 +155,13 @@ function HighlightsBlock({ highlights }: { highlights: string[] }) {
       <div className="flex flex-col gap-4">
         {highlights.map((h, i) => {
           return (
-            <div key={i} className="flex items-center gap-4">
+            <div key={i} className="flex items-start gap-4">
               <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0 border border-gray-200">
                 {getIconForHighlight(h)}
               </div>
-              <span className="text-sm text-gray-900 leading-snug">{h}</span>
+              <span className="text-sm text-gray-900 leading-snug pt-2">
+                {h}
+              </span>
             </div>
           );
         })}
@@ -168,7 +171,7 @@ function HighlightsBlock({ highlights }: { highlights: string[] }) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   Specifications — Flipkart-style table layout
+   Specifications — Improved Flipkart-style table layout
    ═══════════════════════════════════════════════════════ */
 function SpecificationsBlock({
   groups,
@@ -195,21 +198,21 @@ function SpecificationsBlock({
         </button>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-8">
         {groups.map(({ group, specs }) => {
           const isInTheBox = group.toLowerCase().includes("box");
 
           return (
-            <div key={group} className="mb-6">
+            <div key={group}>
               <h3 className="text-base font-medium text-gray-900 mb-4">
                 {group}
               </h3>
 
               {isInTheBox ? (
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-2">
                   {specs.map((spec, i) => (
                     <div key={i} className="flex flex-col">
-                      <span className="text-sm text-gray-500 mb-1">
+                      <span className="text-sm text-gray-500 mb-0.5">
                         {spec.key}
                       </span>
                       <span className="text-sm text-gray-800 leading-relaxed">
@@ -224,7 +227,7 @@ function SpecificationsBlock({
                     <div
                       key={i}
                       className={`flex flex-col ${
-                        i >= 2 ? "border-t border-gray-100 pt-4" : ""
+                        i > 1 ? "border-t border-gray-100 pt-4" : ""
                       }`}
                     >
                       <span className="text-sm text-gray-500 mb-1">
@@ -240,6 +243,92 @@ function SpecificationsBlock({
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Similar Products Section
+   ═══════════════════════════════════════════════════════ */
+function SimilarProducts({
+  category,
+  currentProductId,
+}: {
+  category: string;
+  currentProductId: string;
+}) {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSimilar = async () => {
+      setLoading(true);
+      try {
+        // ⚠️ REPLACE THIS MOCK FETCH WITH YOUR ACTUAL API CALL
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        setProducts([]);
+      } catch (error) {
+        console.error("Failed to fetch similar products", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (category) fetchSimilar();
+  }, [category]);
+
+  if (loading) {
+    return (
+      <div className="mt-12 pt-8 border-t border-gray-200">
+        <h2 className="text-xl font-medium text-gray-900 mb-6">
+          Similar Products
+        </h2>
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="w-40 shrink-0 space-y-2">
+              <Sk className="aspect-square rounded-lg" />
+              <Sk className="h-4 w-3/4" />
+              <Sk className="h-4 w-1/2" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (products.length === 0) return null;
+
+  return (
+    <div className="mt-12 pt-8 border-t border-gray-200">
+      <h2 className="text-xl font-medium text-gray-900 mb-6">
+        Similar Products
+      </h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        {products.map((p) => (
+          <Link key={p.id} href={`/products/${p.id}`} className="group">
+            <div className="aspect-square bg-gray-50 rounded-lg overflow-hidden relative mb-3">
+              <img
+                src={p.images?.[0] || "/placeholder.png"}
+                alt={p.name}
+                className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform"
+              />
+            </div>
+            <h3 className="text-sm font-medium text-gray-900 line-clamp-1">
+              {p.name}
+            </h3>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-sm font-bold text-gray-900">
+                ₹{p.price.toLocaleString()}
+              </span>
+              {p.discountPrice && (
+                <span className="text-xs text-gray-400 line-through">
+                  ₹{p.discountPrice.toLocaleString()}
+                </span>
+              )}
+            </div>
+          </Link>
+        ))}
       </div>
     </div>
   );
@@ -424,6 +513,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
   const [isZoomOpen, setIsZoomOpen] = useState(false);
 
   const loadGenerationRef = useRef(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const hasVariants = !!product.options?.length && !!product.variants?.length;
 
@@ -533,11 +623,17 @@ export default function ProductDetailClient({ product }: { product: Product }) {
     return out;
   }, [hasVariants, activeVariant, product.images, product.options]);
 
+  // INSTANTLY reset image when variant changes to prevent showing old image
   useEffect(() => {
     loadGenerationRef.current += 1;
     setActiveImg(0);
     setImgError(false);
     setLoadedSrc(null);
+
+    // Scroll slider back to start on mobile
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ left: 0, behavior: "instant" });
+    }
   }, [activeVariant?.id]);
 
   const safeActiveImg = Math.min(activeImg, gallery.length - 1);
@@ -668,6 +764,25 @@ export default function ProductDetailClient({ product }: { product: Product }) {
     setActiveImg(i);
     setImgError(false);
     setLoadedSrc(null);
+
+    // Scroll the mobile slider to the clicked image
+    if (scrollContainerRef.current) {
+      const width = scrollContainerRef.current.clientWidth;
+      scrollContainerRef.current.scrollTo({
+        left: i * width,
+        behavior: "smooth",
+      });
+    }
+  };
+
+  // Handle scroll snapping on mobile
+  const handleScroll = () => {
+    if (!scrollContainerRef.current) return;
+    const { scrollLeft, clientWidth } = scrollContainerRef.current;
+    const newIndex = Math.round(scrollLeft / clientWidth);
+    if (newIndex !== activeImg) {
+      setActiveImg(newIndex);
+    }
   };
 
   const highlights = useMemo(
@@ -691,72 +806,50 @@ export default function ProductDetailClient({ product }: { product: Product }) {
 
   return (
     <>
-      <div className="max-w-6xl mx-auto px-4 py-6 md:py-12 pb-24 md:pb-12">
-        <div className="grid md:grid-cols-5 gap-6 md:gap-10">
+      <div className="w-full">
+        <div className="grid md:grid-cols-5 gap-0 md:gap-10">
           {/* ─────────── IMAGE COLUMN (2/5) ─────────── */}
-          <div className="md:col-span-2">
-            <div className="md:sticky md:top-24">
-              <div className="relative group">
-                <div className="relative aspect-square rounded-3xl overflow-hidden bg-gray-50">
-                  {imgError ? (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                      <AlertTriangle size={32} className="mb-2" />
-                      <p className="text-xs">Image unavailable</p>
-                    </div>
-                  ) : (
-                    <>
-                      {showSkeleton && <ImageSkeleton />}
-                      <img
-                        key={`${currentImage}::${loadedSrc === currentImage ? "loaded" : "loading"}`}
-                        src={currentImage}
-                        alt={displayTitle}
-                        loading="eager"
-                        fetchPriority="high"
-                        decoding="sync"
-                        className={`absolute inset-0 w-full h-full object-contain p-8 transition-all duration-300 cursor-zoom-in ${
-                          imgLoaded
-                            ? "opacity-100 scale-100"
-                            : "opacity-0 scale-95"
-                        }`}
-                        onClick={() => setIsZoomOpen(true)}
-                        onLoad={() => {
-                          setLoadedSrc((prev) =>
-                            prev === currentImage ? prev : currentImage,
-                          );
-                        }}
-                        onError={() => setImgError(true)}
-                      />
-                    </>
-                  )}
-
-                  {gallery.length > 1 && (
-                    <>
-                      <button
-                        onClick={goPrevImg}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 backdrop-blur shadow-sm flex items-center justify-center text-gray-700 hover:scale-105 transition opacity-0 group-hover:opacity-100"
-                        aria-label="Previous image"
+          <div className="md:col-span-2 w-full max-w-[480px] mx-auto flex justify-center">
+            <div className="md:sticky md:top-24 w-full">
+              <div className="relative group w-full">
+                {/* 
+                  MOBILE SLIDER VIEW 
+                  (Full width, scroll snap, no arrows)
+                */}
+                <div className="block md:hidden w-full">
+                  <div
+                    ref={scrollContainerRef}
+                    onScroll={handleScroll}
+                    className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide w-full aspect-square bg-gray-50"
+                  >
+                    {gallery.map((img, i) => (
+                      <div
+                        key={i}
+                        className="w-full h-full shrink-0 snap-center relative flex items-center justify-center p-4"
                       >
-                        <ChevronLeft size={16} />
-                      </button>
-                      <button
-                        onClick={goNextImg}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 backdrop-blur shadow-sm flex items-center justify-center text-gray-700 hover:scale-105 transition opacity-0 group-hover:opacity-100"
-                        aria-label="Next image"
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </>
-                  )}
+                        {imgError ? (
+                          <AlertTriangle size={32} className="text-gray-400" />
+                        ) : (
+                          <img
+                            src={img}
+                            alt={`${displayTitle} - ${i + 1}`}
+                            className="w-full h-full object-contain cursor-zoom-in"
+                            onClick={() => setIsZoomOpen(true)}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
 
-                  <div className="absolute top-3 right-3 flex gap-1.5">
+                  {/* Mobile Overlay Controls */}
+                  <div className="absolute top-3 right-3 flex gap-1.5 z-10">
                     <button
                       onClick={() => setWishlisted((w) => !w)}
                       className={`w-8 h-8 rounded-full backdrop-blur shadow-sm flex items-center justify-center transition ${
                         wishlisted
                           ? "bg-red-500 text-white"
-                          : "bg-white/90 text-gray-600 hover:bg-white"
+                          : "bg-white/90 text-gray-600"
                       }`}
-                      aria-label="Wishlist"
                     >
                       <Heart
                         size={14}
@@ -765,22 +858,110 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                     </button>
                     <button
                       onClick={handleShare}
-                      className="w-8 h-8 rounded-full bg-white/90 backdrop-blur shadow-sm flex items-center justify-center text-gray-600 hover:bg-white transition"
-                      aria-label="Share"
+                      className="w-8 h-8 rounded-full bg-white/90 backdrop-blur shadow-sm flex items-center justify-center text-gray-600"
                     >
                       <Share2 size={14} />
                     </button>
                   </div>
 
+                  {/* Mobile Pagination Dots */}
                   {gallery.length > 1 && (
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur text-gray-700 text-[10px] font-medium px-2.5 py-0.5 rounded-full shadow-sm pointer-events-none">
-                      {safeActiveImg + 1} / {gallery.length}
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+                      {gallery.map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-1.5 rounded-full transition-all ${
+                            safeActiveImg === i
+                              ? "w-4 bg-gray-900"
+                              : "w-1.5 bg-gray-300"
+                          }`}
+                        />
+                      ))}
                     </div>
                   )}
                 </div>
 
+                {/* 
+                  DESKTOP IMAGE VIEW 
+                  (Centered, slightly larger than before)
+                */}
+                <div className="hidden md:flex justify-center w-full">
+                  <div className="relative aspect-square w-full max-w-[440px] overflow-hidden bg-gray-50 rounded-3xl">
+                    {imgError ? (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
+                        <AlertTriangle size={32} className="mb-2" />
+                        <p className="text-xs">Image unavailable</p>
+                      </div>
+                    ) : (
+                      <>
+                        {showSkeleton && <ImageSkeleton />}
+                        <img
+                          key={`${currentImage}::${loadedSrc === currentImage ? "loaded" : "loading"}`}
+                          src={currentImage}
+                          alt={displayTitle}
+                          loading="eager"
+                          fetchPriority="high"
+                          decoding="sync"
+                          className={`absolute inset-0 w-full h-full object-contain p-5 transition-all duration-300 cursor-zoom-in ${
+                            imgLoaded
+                              ? "opacity-100 scale-100"
+                              : "opacity-0 scale-95"
+                          }`}
+                          onClick={() => setIsZoomOpen(true)}
+                          onLoad={() =>
+                            setLoadedSrc((prev) =>
+                              prev === currentImage ? prev : currentImage,
+                            )
+                          }
+                          onError={() => setImgError(true)}
+                        />
+                      </>
+                    )}
+
+                    {gallery.length > 1 && (
+                      <>
+                        <button
+                          onClick={goPrevImg}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 backdrop-blur shadow-sm flex items-center justify-center text-gray-700 hover:scale-105 transition opacity-0 group-hover:opacity-100"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        <button
+                          onClick={goNextImg}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 backdrop-blur shadow-sm flex items-center justify-center text-gray-700 hover:scale-105 transition opacity-0 group-hover:opacity-100"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </>
+                    )}
+
+                    <div className="absolute top-3 right-3 flex gap-1.5">
+                      <button
+                        onClick={() => setWishlisted((w) => !w)}
+                        className={`w-8 h-8 rounded-full backdrop-blur shadow-sm flex items-center justify-center transition ${
+                          wishlisted
+                            ? "bg-red-500 text-white"
+                            : "bg-white/90 text-gray-600 hover:bg-white"
+                        }`}
+                      >
+                        <Heart
+                          size={14}
+                          fill={wishlisted ? "currentColor" : "none"}
+                        />
+                      </button>
+                      <button
+                        onClick={handleShare}
+                        className="w-8 h-8 rounded-full bg-white/90 backdrop-blur shadow-sm flex items-center justify-center text-gray-600 hover:bg-white transition"
+                      >
+                        <Share2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Thumbnails (Desktop) — centered under the image */}
                 {gallery.length > 1 && (
-                  <div className="flex gap-2 mt-3 justify-center flex-wrap">
+                  <div className="hidden md:flex gap-2 mt-3 justify-center flex-wrap">
                     {gallery.map((img, i) => (
                       <button
                         key={i}
@@ -819,7 +1000,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
           </div>
 
           {/* ─────────── CONTENT COLUMN (3/5) ─────────── */}
-          <div className="md:col-span-3">
+          <div className="md:col-span-3 px-4 md:px-0 py-4 md:py-0">
             {!infoReady ? (
               <InfoSkeleton />
             ) : (
@@ -863,7 +1044,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                   {displayTitle}
                 </h1>
 
-                {/* Rating & Discount (After Title, Before Variants) */}
+                {/* Rating & Discount */}
                 <div className="flex items-center gap-2 mb-6 text-xs">
                   <div className="flex items-center gap-1 bg-green-700 px-1.5 py-0.5 rounded text-white font-medium">
                     <span>4.3</span>
@@ -883,7 +1064,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                   )}
                 </div>
 
-                {/* Price & MRP (Before Variants) */}
+                {/* Price & MRP */}
                 <div className="flex items-end gap-3 flex-wrap mb-2">
                   <span className="text-3xl md:text-4xl font-bold text-gray-900 leading-none">
                     ₹{price.toLocaleString()}
@@ -999,12 +1180,12 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                 {/* Highlights */}
                 <HighlightsBlock highlights={highlights} />
 
-                {/* Gap between highlights and buttons */}
-                <div className="mt-10"></div>
+                {/* Gap */}
+                <div className="mt-8"></div>
 
                 {/* Qty + Add Buttons */}
                 <div className="flex flex-col sm:flex-row gap-2.5 mb-4">
-                  <div className="flex items-center border border-gray-300 rounded-sm h-12 bg-white">
+                  <div className="flex items-center border border-gray-300 rounded-sm h-12 bg-white w-full sm:w-auto">
                     <button
                       type="button"
                       onClick={decQty}
@@ -1101,6 +1282,12 @@ export default function ProductDetailClient({ product }: { product: Product }) {
 
                 {/* Specifications */}
                 <SpecificationsBlock groups={groupedSpecs} />
+
+                {/* Similar Products */}
+                <SimilarProducts
+                  category={product.category || "general"}
+                  currentProductId={product.id}
+                />
               </>
             )}
           </div>
