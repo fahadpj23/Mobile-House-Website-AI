@@ -38,7 +38,7 @@ export default function ProductVariantListItem({ product, variant }: Props) {
 
   // Price / MRP
   const price = variant.price;
-  const mrp = variant.discountPrice;
+  const mrp = variant.mrp;
   const hasDiscount = typeof mrp === "number" && mrp > price;
   const discountPct = hasDiscount
     ? Math.round(((mrp! - price) / mrp!) * 100)

@@ -342,7 +342,7 @@ export default function VariantEditor({
         id: uid(),
         optionValueIds: ids,
         price: basePrice,
-        discountPrice: baseMrp,
+        mrp: baseMrp,
         stock: baseStock,
         enabled: true,
         images: [],
@@ -684,7 +684,7 @@ export default function VariantEditor({
                 </button>
                 <button
                   type="button"
-                  onClick={() => applyToAll({ discountPrice: baseMrp })}
+                  onClick={() => applyToAll({ mrp: baseMrp })}
                   className="text-xs text-blue-600 underline"
                 >
                   Set all MRP to base
@@ -942,11 +942,11 @@ export default function VariantEditor({
                             <input
                               type="number"
                               className="w-24 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              value={v.discountPrice ?? ""}
+                              value={v.mrp ?? ""}
                               placeholder="MRP"
                               onChange={(e) =>
                                 updateVariant(vi, {
-                                  discountPrice: e.target.value
+                                  mrp: e.target.value
                                     ? Number(e.target.value)
                                     : undefined,
                                 })

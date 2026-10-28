@@ -40,7 +40,7 @@ export default function ProductVariantCard({ product, variant }: Props) {
 
   // ── Price / MRP ──
   const price = variant.price;
-  const mrp = variant.discountPrice; // change to variant.mrp if you renamed
+  const mrp = variant.mrp; // change to variant.mrp if you renamed
   const hasDiscount = typeof mrp === "number" && mrp > price;
   const discountPct = hasDiscount
     ? Math.round(((mrp! - price) / mrp!) * 100)

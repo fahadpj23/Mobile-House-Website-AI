@@ -166,13 +166,10 @@ function SpecificationsBlock({
                       key={i}
                       className={[
                         "px-5 py-4 flex flex-col gap-1",
-                        // Elegant right border for left column
                         i % 2 === 0 ? "sm:border-r sm:border-gray-100" : "",
-                        // Bottom border for all rows except last
                         i < specs.length - (specs.length % 2 === 0 ? 2 : 1)
                           ? "border-b border-gray-100"
                           : "",
-                        // Mobile border fix
                         "max-sm:border-b max-sm:border-gray-100 max-sm:last:border-b-0",
                       ]
                         .filter(Boolean)
@@ -260,7 +257,7 @@ function SimilarProducts({
                 <img
                   src={p.images?.[0] || "/placeholder.png"}
                   alt={p.name}
-                  className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform"
+                  className="w-full h-full max-w-full max-h-full object-contain p-4 group-hover:scale-105 transition-transform"
                 />
               </div>
               <h3 className="text-sm font-medium text-gray-900 line-clamp-1">
@@ -270,9 +267,9 @@ function SimilarProducts({
                 <span className="text-sm font-bold text-gray-900">
                   ₹{p.price.toLocaleString()}
                 </span>
-                {p.discountPrice && (
+                {p.mrp && (
                   <span className="text-xs text-gray-400 line-through">
-                    ₹{p.discountPrice.toLocaleString()}
+                    ₹{p.mrp.toLocaleString()}
                   </span>
                 )}
               </div>
@@ -387,6 +384,7 @@ function ImageZoomModal({
         <img
           src={images[activeIndex]}
           alt={`Zoomed view ${activeIndex + 1}`}
+          decoding="async"
           className="max-w-full max-h-[85vh] object-contain"
         />
 
@@ -430,7 +428,8 @@ function ImageZoomModal({
               <img
                 src={img}
                 alt=""
-                className="w-full h-full object-cover bg-white"
+                decoding="async"
+                className="w-full h-full max-w-full max-h-full object-cover bg-white"
               />
             </button>
           ))}
@@ -606,9 +605,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
   const showSkeleton = !imgLoaded && !imgError;
 
   const price = activeVariant ? activeVariant.price : product.price;
-  const originalPrice = activeVariant
-    ? activeVariant.discountPrice
-    : product.discountPrice;
+  const originalPrice = activeVariant ? activeVariant.mrp : product.mrp;
   const stock = activeVariant ? activeVariant.stock : product.stock;
 
   useEffect(() => {
@@ -792,8 +789,9 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                           <img
                             src={img}
                             alt={`${displayTitle} - ${i + 1}`}
-                            // ✅ Added max-w-none to prevent auto-scroll bug
-                            className="w-full h-full max-w-none object-contain cursor-zoom-in"
+                            decoding="async"
+                            // ✅ max-h-full ceiling; max-w-none preserves existing scroll fix
+                            className="w-full h-full max-w-none max-h-full object-contain cursor-zoom-in"
                             onClick={() => setIsZoomOpen(true)}
                           />
                         )}
@@ -850,17 +848,19 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                     ) : (
                       <>
                         {showSkeleton && <ImageSkeleton />}
+                        {/*
+                          ✅ FIX: no remounting key, transition-opacity only,
+                          no scale on the img, decoding="async",
+                          hard max-w-full / max-h-full ceiling
+                        */}
                         <img
-                          key={`${currentImage}::${loadedSrc === currentImage ? "loaded" : "loading"}`}
                           src={currentImage}
                           alt={displayTitle}
                           loading="eager"
                           fetchPriority="high"
-                          decoding="sync"
-                          className={`absolute inset-0 w-full h-full object-contain p-5 transition-all duration-300 cursor-zoom-in ${
-                            imgLoaded
-                              ? "opacity-100 scale-100"
-                              : "opacity-0 scale-95"
+                          decoding="async"
+                          className={`absolute inset-0 w-full h-full max-w-full max-h-full object-contain p-5 cursor-zoom-in transition-opacity duration-300 ${
+                            imgLoaded ? "opacity-100" : "opacity-0"
                           }`}
                           onClick={() => setIsZoomOpen(true)}
                           onLoad={() =>
@@ -940,7 +940,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                             alt=""
                             loading="lazy"
                             decoding="async"
-                            className="absolute inset-0 w-full h-full object-contain p-1"
+                            className="absolute inset-0 w-full h-full max-w-full max-h-full object-contain p-1"
                             onError={() =>
                               setImgThumbError((m) => ({ ...m, [i]: true }))
                             }
@@ -1074,7 +1074,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                                             alt={v.label}
                                             loading="lazy"
                                             decoding="async"
-                                            className="absolute inset-0 w-full h-full object-contain p-0.5"
+                                            className="absolute inset-0 w-full h-full max-w-full max-h-full object-contain p-0.5"
                                           />
                                         ) : (
                                           <div

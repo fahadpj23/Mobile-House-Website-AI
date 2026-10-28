@@ -26,16 +26,18 @@ export default function Footer() {
           <h4 className="font-semibold mb-2">Payment</h4>
           <ul className="text-sm space-y-1 text-gray-400">
             <li>Cash on Delivery</li>
-            <li>Card Payment</li>
-            <li>bKash / Nagad</li>
           </ul>
         </div>
         <div>
           <h4 className="font-semibold mb-2">Contact</h4>
           <p className="text-sm text-gray-400">
-            support@mobilehouse.com
+            mobilehouse3way@gmail.com
             <br />
-            +880 1234-567890
+            +91 9072430483
+            <br />
+            +91 8304830868
+            <br />
+            +91 9544466724
           </p>
         </div>
       </div>

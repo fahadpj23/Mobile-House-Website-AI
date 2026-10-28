@@ -1,4 +1,3 @@
-// app/checkout/page.tsx
 "use client";
 import { useState } from "react";
 import { useCart } from "@/components/CartProvider";
@@ -15,7 +14,6 @@ export default function CheckoutPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  // Fixed to COD only as requested
   const payment: PaymentMethod = "cod";
 
   const [form, setForm] = useState({
@@ -44,10 +42,9 @@ export default function CheckoutPage() {
         items: items.map((i) => {
           const v = i.product.variants?.find((x) => x.id === i.variantId);
 
-          // ✅ USING ACTUAL PRICE INSTEAD OF MRP
+          // ✅ Save strictly `price` to Firestore
           const unitPrice = v ? v.price : i.product.price;
 
-          // Pick color image as thumbnail if available
           let image = i.product.images[0] || "";
           if (v && i.product.options) {
             const colorOpt = i.product.options.find((o) => o.type === "color");
@@ -75,7 +72,7 @@ export default function CheckoutPage() {
             image,
           };
         }),
-        total,
+        total, // ✅ Uses strictly `price` total
         status: "pending",
         paymentMethod: payment,
         paymentStatus: "unpaid",
@@ -121,7 +118,7 @@ export default function CheckoutPage() {
                 </label>
                 <input
                   required
-                  placeholder="e.g. John Doe"
+                  placeholder="e.g. Arjun"
                   className="w-full h-11 px-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -145,7 +142,7 @@ export default function CheckoutPage() {
                 </label>
                 <input
                   required
-                  placeholder="e.g. Mumbai"
+                  placeholder="e.g. Thrissur"
                   className="w-full h-11 px-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
                   value={form.city}
                   onChange={(e) => setForm({ ...form, city: e.target.value })}
@@ -217,8 +214,9 @@ export default function CheckoutPage() {
                 const key = `${i.product.id}__${i.variantId || "base"}`;
                 const v = i.product.variants?.find((x) => x.id === i.variantId);
 
-                // ✅ USING ACTUAL PRICE INSTEAD OF MRP
+                // ✅ ALWAYS use base `price`
                 const unit = v ? v.price : i.product.price;
+                const lineTotal = unit * i.quantity;
 
                 let image = i.product.images[0] || "";
                 if (v && i.product.options) {
@@ -264,9 +262,12 @@ export default function CheckoutPage() {
                         <p className="text-[12px] text-gray-500">
                           Qty: {i.quantity}
                         </p>
-                        <p className="text-[13px] font-bold text-gray-900">
-                          ₹{unit * i.quantity}
-                        </p>
+                        <div className="text-right">
+                          {/* ✅ Only show price. No strikethrough. */}
+                          <p className="text-[13px] font-bold text-gray-900 tabular-nums">
+                            ₹{lineTotal.toFixed(2)}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -275,17 +276,24 @@ export default function CheckoutPage() {
             </div>
 
             <div className="space-y-2.5 text-sm border-t border-gray-100 pt-4">
+              {/* ✅ Subtotal strictly uses total (price math) */}
               <div className="flex justify-between text-gray-500">
                 <span>Subtotal</span>
-                <span className="text-gray-900">₹{total}</span>
+                <span className="text-gray-900 font-semibold tabular-nums">
+                  ₹{total.toFixed(2)}
+                </span>
               </div>
+
               <div className="flex justify-between text-gray-500">
                 <span>Shipping</span>
                 <span className="text-green-600 font-medium">Free</span>
               </div>
+
               <div className="flex justify-between font-bold text-lg pt-2 border-t border-gray-100">
                 <span className="text-gray-900">Total</span>
-                <span className="text-gray-900">₹{total}</span>
+                <span className="text-gray-900 tabular-nums">
+                  ₹{total.toFixed(2)}
+                </span>
               </div>
             </div>
 

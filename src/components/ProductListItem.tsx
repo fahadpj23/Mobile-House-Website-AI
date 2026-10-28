@@ -33,7 +33,7 @@ export default function ProductListItem({ product }: Props) {
   const image = productThumb(product);
 
   const price = firstVariant ? firstVariant.price : product.price;
-  const mrp = firstVariant ? firstVariant.discountPrice : product.discountPrice;
+  const mrp = firstVariant ? firstVariant.mrp : product.mrp;
   const hasDiscount = typeof mrp === "number" && mrp > price;
   const discountPct = hasDiscount
     ? Math.round(((mrp! - price) / mrp!) * 100)

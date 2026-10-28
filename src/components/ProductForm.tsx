@@ -93,7 +93,7 @@ export default function ProductForm({ initialData }: Props) {
       name: initialData?.name || "",
       description: initialData?.description || "",
       price: initialData?.price ? String(initialData.price) : "",
-      mrp: initialData?.discountPrice ? String(initialData.discountPrice) : "",
+      mrp: initialData?.mrp ? String(initialData.mrp) : "",
       brand: initialData?.brand || "",
       stock: initialData?.stock ? String(initialData.stock) : "",
       images: initialData?.images || ([] as string[]),
@@ -271,10 +271,14 @@ export default function ProductForm({ initialData }: Props) {
   const removeImage = (idx: number) =>
     setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== idx) }));
 
+  // ✅ FIXED: Explicitly set placeholder and required to avoid Firestore undefined errors
   const addSpec = (group = "General") =>
     setForm((f) => ({
       ...f,
-      specifications: [...f.specifications, { key: "", value: "", group }],
+      specifications: [
+        ...f.specifications,
+        { key: "", value: "", group, placeholder: "", required: false },
+      ],
     }));
 
   const updateSpec = (i: number, field: keyof SpecValue, value: string) =>
@@ -350,14 +354,15 @@ export default function ProductForm({ initialData }: Props) {
       }
     }
 
+    // ✅ FIXED: Clean specs and ensure NO undefined values slip through
     const cleanedSpecs = form.specifications
       .filter((s) => s.key.trim() && s.value.trim())
       .map(({ key, value, placeholder, required, group }) => ({
         key: key.trim(),
         value: value.trim(),
-        placeholder,
-        required,
-        group,
+        placeholder: placeholder ?? "", // fallback to empty string
+        required: !!required, // force boolean
+        group: group ?? "General", // fallback to "General"
       }));
 
     const cleanedHighlights = form.highlights
@@ -371,8 +376,7 @@ export default function ProductForm({ initialData }: Props) {
         : priceNum;
 
       const finalMrp = hasVariantsLocal
-        ? Math.max(...enabledVariants.map((v) => v.discountPrice ?? 0), 0) ||
-          undefined
+        ? Math.max(...enabledVariants.map((v) => v.mrp ?? 0), 0) || undefined
         : mrpNum || undefined;
 
       const finalStock = hasVariantsLocal
@@ -396,7 +400,7 @@ export default function ProductForm({ initialData }: Props) {
         totalSold: totalSoldNum,
       };
 
-      if (finalMrp !== undefined) payload.discountPrice = finalMrp;
+      if (finalMrp !== undefined) payload.mrp = finalMrp;
       if (form.series) payload.series = form.series;
       if (form.seriesName) payload.seriesName = form.seriesName;
 

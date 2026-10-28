@@ -78,7 +78,7 @@ export default function ProductCard({
   }, [displayImage]);
 
   const price = firstVariant ? firstVariant.price : product.price;
-  const mrp = firstVariant ? firstVariant.discountPrice : product.discountPrice;
+  const mrp = firstVariant ? firstVariant.mrp : product.mrp;
   const hasDiscount = typeof mrp === "number" && mrp > price;
   const discountPct = hasDiscount
     ? Math.round(((mrp! - price) / mrp!) * 100)

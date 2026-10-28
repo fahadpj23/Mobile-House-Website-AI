@@ -95,7 +95,7 @@ export interface ProductVariant {
   optionValueIds: string[];
   sku?: string;
   price: number;
-  discountPrice?: number;
+  mrp?: number;
   stock: number;
   /** Per-variant gallery. If empty, storefront falls back to color images. */
   images?: string[];
@@ -116,7 +116,7 @@ export interface Product {
   description?: string;
   highlights?: string[];
   price: number;
-  discountPrice?: number;
+  mrp?: number;
   category: string;
   categoryPath?: string[];
   categoryName?: string;
