@@ -37,8 +37,11 @@ interface CartCtx {
 const Ctx = createContext<CartCtx | null>(null);
 const STORAGE_KEY = "cart_v1";
 
-const makeKey = (productId: string, variantId?: string) =>
+// ✅ FIXED: Explicitly accept `string | undefined` for variantId
+const makeKey = (productId: string, variantId?: string | undefined) =>
   `${productId}__${variantId || "base"}`;
+
+// ✅ FIXED: i.product.id (not i.productId)
 const keyOf = (i: CartItem) => makeKey(i.product.id, i.variantId);
 
 export function CartProvider({ children }: { children: ReactNode }) {
