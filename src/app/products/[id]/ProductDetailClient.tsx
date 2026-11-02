@@ -21,7 +21,6 @@ import {
   ChevronRight,
   Heart,
   Share2,
-  Info,
   X,
 } from "lucide-react";
 
@@ -103,23 +102,15 @@ function HighlightsBlock({ highlights }: { highlights: string[] }) {
 
 /* ═══════════════════════════════════════════════════════
    Specifications — Soft, Elegant Cards
+   (renders nothing at all when there are no specs)
    ═══════════════════════════════════════════════════════ */
 function SpecificationsBlock({
   groups,
 }: {
   groups: { group: string; specs: SpecValue[] }[];
 }) {
-  if (!groups.length) {
-    return (
-      <div className="mt-10 border-t border-gray-100 pt-8">
-        <h2 className="text-xl font-bold text-gray-900 mb-3">Specifications</h2>
-        <div className="flex items-start gap-2 py-3">
-          <Info size={14} className="text-gray-400 shrink-0 mt-0.5" />
-          <p className="text-sm text-gray-500">No specifications provided.</p>
-        </div>
-      </div>
-    );
-  }
+  // No specs → no heading, no section
+  if (!groups.length) return null;
 
   return (
     <div className="mt-10 border-t border-gray-100 pt-8">
@@ -194,8 +185,11 @@ function SpecificationsBlock({
 }
 
 /* ═══════════════════════════════════════════════════════
-   Similar Products Section
+   Similar Products — same category, slider, max 10,
+   fetched lazily only when the user scrolls near it
    ═══════════════════════════════════════════════════════ */
+const MAX_SIMILAR = 10;
+
 function SimilarProducts({
   category,
   currentProductId,
@@ -204,24 +198,86 @@ function SimilarProducts({
   currentProductId: string;
 }) {
   const [products, setProducts] = useState<Product[]>([]);
+  const [visible, setVisible] = useState(false); // section scrolled into view
   const [loading, setLoading] = useState(true);
 
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const sliderRef = useRef<HTMLDivElement>(null);
+
+  // 1) Wait until the user scrolls close to this section
   useEffect(() => {
+    if (visible) return;
+    const el = wrapRef.current;
+    if (!el) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "300px 0px" }, // start loading a bit before it appears
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [visible]);
+
+  // 2) Only now fetch same-category products
+  useEffect(() => {
+    if (!visible || !category) return;
+
+    const controller = new AbortController();
+
     const fetchSimilar = async () => {
       setLoading(true);
       try {
-        // ⚠️ REPLACE THIS MOCK FETCH WITH YOUR ACTUAL API CALL
-        await new Promise((resolve) => setTimeout(resolve, 800));
-        setProducts([]);
+        // ⚠️ Adjust this endpoint to match your API / data source.
+        const res = await fetch(
+          `/api/products?category=${encodeURIComponent(category)}&limit=${MAX_SIMILAR + 1}`,
+          { signal: controller.signal },
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        const list: Product[] = Array.isArray(data)
+          ? data
+          : (data.products ?? []);
+
+        setProducts(
+          list
+            .filter((p) => p.id && p.id !== currentProductId)
+            .slice(0, MAX_SIMILAR),
+        );
       } catch (error) {
-        console.error("Failed to fetch similar products", error);
+        if ((error as Error).name !== "AbortError") {
+          console.error("Failed to fetch similar products", error);
+          setProducts([]);
+        }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
-    if (category) fetchSimilar();
-  }, [category, currentProductId]);
+    fetchSimilar();
+    return () => controller.abort();
+  }, [visible, category, currentProductId]);
+
+  const scrollByCards = (dir: 1 | -1) => {
+    const el = sliderRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: "smooth" });
+  };
+
+  // Not scrolled to yet: invisible sentinel (no heading, no network call)
+  if (!visible) {
+    return <div ref={wrapRef} className="mt-12 h-24" aria-hidden />;
+  }
 
   if (loading) {
     return (
@@ -229,9 +285,9 @@ function SimilarProducts({
         <h2 className="text-xl font-semibold text-gray-900 mb-6">
           Similar Products
         </h2>
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div className="flex gap-4 overflow-hidden pb-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="w-40 shrink-0 space-y-2">
+            <div key={i} className="w-[150px] sm:w-[170px] shrink-0 space-y-2">
               <Sk className="aspect-square rounded-lg" />
               <Sk className="h-4 w-3/4" />
               <Sk className="h-4 w-1/2" />
@@ -242,48 +298,74 @@ function SimilarProducts({
     );
   }
 
+  // Nothing found → hide the whole section (heading included)
   if (products.length === 0) return null;
 
   return (
-    <div className="mt-12 pt-8 border-t border-gray-100">
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">
-        Similar Products
-      </h2>
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        {products.map((p) =>
-          p.id ? (
-            <Link
-              key={p.id}
-              href={`/products/${p.id}`}
-              className="group min-w-0"
+    <div className="mt-12 pt-8 border-t border-gray-100 min-w-0">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold text-gray-900">
+          Similar Products
+        </h2>
+
+        {products.length > 2 && (
+          <div className="hidden md:flex gap-2">
+            <button
+              type="button"
+              onClick={() => scrollByCards(-1)}
+              className="w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 transition"
+              aria-label="Scroll left"
             >
-              {/* ✅ FIX: image is absolute inside a fixed square box, so it
-                  can never push the layout wider while it is loading */}
-              <div className="aspect-square bg-gray-50 rounded-lg overflow-hidden relative mb-3">
-                <img
-                  src={p.images?.[0] || "/placeholder.png"}
-                  alt={p.name}
-                  loading="lazy"
-                  decoding="async"
-                  className="absolute inset-0 w-full h-full max-w-full max-h-full object-contain p-4 group-hover:scale-105 transition-transform"
-                />
-              </div>
-              <h3 className="text-sm font-medium text-gray-900 line-clamp-1">
-                {p.name}
-              </h3>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-sm font-bold text-gray-900">
-                  ₹{p.price.toLocaleString()}
-                </span>
-                {p.mrp && (
-                  <span className="text-xs text-gray-400 line-through">
-                    ₹{p.mrp.toLocaleString()}
-                  </span>
-                )}
-              </div>
-            </Link>
-          ) : null,
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollByCards(1)}
+              className="w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 transition"
+              aria-label="Scroll right"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
         )}
+      </div>
+
+      <div
+        ref={sliderRef}
+        className="flex gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-2 w-full max-w-full"
+      >
+        {products.map((p) => (
+          <Link
+            key={p.id}
+            href={`/products/${p.id}`}
+            className="group snap-start shrink-0 w-[150px] sm:w-[170px] min-w-0"
+          >
+            {/* image is absolute inside a fixed square box, so it
+                can never push the layout wider while it is loading */}
+            <div className="aspect-square bg-gray-50 rounded-lg overflow-hidden relative mb-3">
+              <img
+                src={p.images?.[0] || "/placeholder.png"}
+                alt={p.name}
+                loading="lazy"
+                decoding="async"
+                className="absolute inset-0 w-full h-full max-w-full max-h-full object-contain p-4 group-hover:scale-105 transition-transform"
+              />
+            </div>
+            <h3 className="text-sm font-medium text-gray-900 line-clamp-1">
+              {p.name}
+            </h3>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-sm font-bold text-gray-900">
+                ₹{p.price.toLocaleString()}
+              </span>
+              {p.mrp && p.mrp > p.price && (
+                <span className="text-xs text-gray-400 line-through">
+                  ₹{p.mrp.toLocaleString()}
+                </span>
+              )}
+            </div>
+          </Link>
+        ))}
       </div>
     </div>
   );
@@ -619,7 +701,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeVariant?.id, gallery.length]);
 
-  // ✅ Force scroll to start on initial mobile load
+  // Force scroll to start on initial mobile load
   useEffect(() => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTo({ left: 0, behavior: "instant" });
@@ -716,9 +798,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
     return true;
   };
 
-  /* ──────────────── ADD TO CART (stays on page) ───────
-     Shows a brief "Added" state on buttons — no redirect.
-  ──────────────────────────────────────────────────── */
+  /* ──────────────── ADD TO CART (stays on page) ─────── */
   const handleAdd = () => {
     if (!addCurrentSelectionToCart()) return;
 
@@ -728,8 +808,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
     toast.success("Added to cart");
   };
 
-  /* ──────────────── BUY NOW (adds + redirects) ────────
-  ──────────────────────────────────────────────────── */
+  /* ──────────────── BUY NOW (adds + redirects) ──────── */
   const handleBuyNow = () => {
     if (!addCurrentSelectionToCart()) return;
     router.push("/checkout");
@@ -814,12 +893,12 @@ export default function ProductDetailClient({ product }: { product: Product }) {
   return (
     <>
       {/*
-        ✅ FIX: overflow-x-clip (NOT overflow-x-hidden) so anything that
+        overflow-x-clip (NOT overflow-x-hidden) so anything that
         briefly grows wider than the screen while loading is clipped,
         without breaking the sticky image column on desktop.
       */}
       <div className="w-full max-w-full overflow-x-clip pt-8 md:pt-12">
-        {/* ✅ FIX: grid children below have min-w-0 so a big image can't stretch the columns */}
+        {/* grid children below have min-w-0 so a big image can't stretch the columns */}
         <div className="grid md:grid-cols-5 gap-0 md:gap-10 items-start">
           {/* ─────────── IMAGE COLUMN (2/5) ─────────── */}
           <div className="min-w-0 md:col-span-2 w-full max-w-[480px] mx-auto flex justify-center md:sticky md:top-28 md:self-start">
@@ -833,9 +912,6 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                     className="flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hide w-full max-w-full aspect-square bg-gray-50"
                   >
                     {gallery.map((img, i) => (
-                      /* ✅ FIX: fixed-size slide, image is absolute inside it,
-                         so the image can never change the slide's size
-                         while it is still loading */
                       <div
                         key={i}
                         className="relative basis-full w-full min-w-full shrink-0 grow-0 snap-center overflow-hidden"
@@ -910,11 +986,6 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                     ) : (
                       <>
                         {showSkeleton && <ImageSkeleton />}
-                        {/*
-                          no remounting key, transition-opacity only,
-                          no scale on the img, decoding="async",
-                          absolute + hard max-w-full / max-h-full ceiling
-                        */}
                         <img
                           src={currentImage}
                           alt={displayTitle}
@@ -1093,7 +1164,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                   </p>
                 )}
 
-                {/* VARIANTS (Reduced Box size) */}
+                {/* VARIANTS */}
                 {hasVariants && (
                   <div className="space-y-4 mb-6 pb-6 border-b border-gray-100">
                     {product.options!.map((opt) => {
@@ -1170,9 +1241,9 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                   </div>
                 )}
 
-                {/* ─────────── QUANTITY & BUTTONS (Reduced Width & Compact) ─────────── */}
+                {/* ─────────── QUANTITY & BUTTONS ─────────── */}
                 <div className="flex flex-row items-center gap-2 mb-8">
-                  {/* Modern Quantity Pill (Compact) */}
+                  {/* Quantity Pill */}
                   <div className="flex items-center justify-between border border-gray-300 rounded-lg h-9 bg-white w-[100px] shadow-sm shrink-0">
                     <button
                       type="button"
@@ -1208,7 +1279,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                     </button>
                   </div>
 
-                  {/* Add to Cart (Compact Outline) - Fixed width to avoid stretching */}
+                  {/* Add to Cart */}
                   <button
                     onClick={handleAdd}
                     disabled={stock <= 0}
@@ -1231,7 +1302,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                     )}
                   </button>
 
-                  {/* Buy Now (Compact Solid) - Fixed width to avoid stretching */}
+                  {/* Buy Now */}
                   <button
                     onClick={handleBuyNow}
                     disabled={stock <= 0}
@@ -1278,17 +1349,20 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                   </p>
                 )}
 
-                {/* Highlights */}
+                {/* Highlights (hidden when empty) */}
                 <HighlightsBlock highlights={highlights} />
 
-                {/* Specifications */}
+                {/* Specifications (hidden when empty, heading included) */}
                 <SpecificationsBlock groups={groupedSpecs} />
 
-                {/* Similar Products */}
-                <SimilarProducts
-                  category={product.category || "general"}
-                  currentProductId={product.id || ""}
-                />
+                {/* Similar products from the same category (at the end) */}
+                {product.category && (
+                  <SimilarProducts
+                    key={product.id}
+                    category={product.category}
+                    currentProductId={product.id || ""}
+                  />
+                )}
               </>
             )}
           </div>

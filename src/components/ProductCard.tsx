@@ -20,15 +20,31 @@ export default function ProductCard({
 
   const hasVariants = !!product.options?.length && !!product.variants?.length;
 
+  /* ✅ Pick the first variant with stock > 0 (prefer enabled ones).
+       If no variant has stock, firstVariant is undefined. */
   const firstVariant: ProductVariant | undefined = useMemo(() => {
     if (!hasVariants) return undefined;
     return (
       product.variants!.find((v) => v.enabled && v.stock > 0) ||
-      product.variants!.find((v) => v.enabled) ||
-      product.variants!.find((v) => (v.images?.length || 0) > 0) || // prefer one with images even if disabled
-      product.variants![0]
+      product.variants!.find((v) => v.stock > 0)
     );
   }, [hasVariants, product.variants]);
+
+  /* ✅ True only when EVERY variant has stock === 0 */
+  const allOutOfStock = useMemo(() => {
+    if (!hasVariants) return false;
+    return product.variants!.every((v) => v.stock <= 0);
+  }, [hasVariants, product.variants]);
+
+  /* Fallback variant used ONLY for picking a display image when all variants are OOS */
+  const imageVariant = useMemo(() => {
+    if (!hasVariants) return undefined;
+    return (
+      firstVariant ||
+      product.variants!.find((v) => v.enabled) ||
+      product.variants![0]
+    );
+  }, [hasVariants, firstVariant, product.variants]);
 
   /* ✅ Display image priority (mirrors ProductDetailClient):
        1. variant.images[0]          → per-variant uploaded in VariantEditor
@@ -39,15 +55,15 @@ export default function ProductCard({
   */
   const displayImage = useMemo(() => {
     // 1️⃣ Per-variant image
-    if (firstVariant?.images?.length) {
-      return firstVariant.images[0];
+    if (imageVariant?.images?.length) {
+      return imageVariant.images[0];
     }
 
-    // 2️⃣ Color option image for the first variant
-    if (firstVariant && product.options?.length) {
+    // 2️⃣ Color option image for the chosen variant
+    if (imageVariant && product.options?.length) {
       const colorIdx = product.options.findIndex((o) => o.type === "color");
       if (colorIdx !== -1) {
-        const valId = firstVariant.optionValueIds[colorIdx];
+        const valId = imageVariant.optionValueIds[colorIdx];
         const img = product.options[colorIdx].values.find((v) => v.id === valId)
           ?.images?.[0];
         if (img) return img;
@@ -69,7 +85,7 @@ export default function ProductCard({
 
     // 5️⃣ Fallback
     return "/placeholder.png";
-  }, [firstVariant, product.images, product.options]);
+  }, [imageVariant, product.images, product.options]);
 
   /* ✅ Reset fade-in + error state whenever the displayed image changes */
   useEffect(() => {
@@ -85,9 +101,7 @@ export default function ProductCard({
     : 0;
 
   const stock = firstVariant ? firstVariant.stock : product.stock;
-  const outOfStock = firstVariant
-    ? !firstVariant.enabled || firstVariant.stock <= 0
-    : product.stock <= 0;
+  const outOfStock = hasVariants ? allOutOfStock : product.stock <= 0;
 
   /* ───────── Variant suffix ───────── */
   const variantSuffix = useMemo(() => {
@@ -134,6 +148,7 @@ export default function ProductCard({
       return;
     }
 
+    // Variant product → add the chosen in-stock variant
     if (hasVariants && firstVariant) {
       const labelParts: string[] = [];
       const selectedOptions: { name: string; value: string }[] = [];
@@ -156,6 +171,7 @@ export default function ProductCard({
       return;
     }
 
+    // Simple product
     addItem(product, 1);
     toast.success(`${displayName} added to cart`);
   };
@@ -238,27 +254,21 @@ export default function ProductCard({
           {stockLabel}
         </Link>
 
-        {/* ✅ Variant products → "Select Options" navigation; simple products → Add to Cart */}
-        {hasVariants ? (
-          <Link
-            href={`/products/${product.id}`}
-            className="mt-1.5 w-full text-[10px] font-semibold py-1.5 rounded-md text-center bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white shadow-sm hover:shadow transition-all"
-          >
-            Select Options
-          </Link>
-        ) : (
-          <button
-            onClick={handleAdd}
-            disabled={outOfStock}
-            className={`mt-1.5 w-full text-[10px] font-semibold py-1.5 rounded-md transition-all ${
-              outOfStock
-                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white shadow-sm hover:shadow"
-            }`}
-          >
-            {outOfStock ? "Out of Stock" : "Add to Cart"}
-          </button>
-        )}
+        {/* ✅ Unified Add to Cart button.
+               - Simple products → adds the product
+               - Variant products → adds the first in-stock variant
+               - Any product with no stock → disabled "Out of Stock" */}
+        <button
+          onClick={handleAdd}
+          disabled={outOfStock}
+          className={`mt-1.5 w-full text-[10px] font-semibold py-1.5 rounded-md transition-all ${
+            outOfStock
+              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+              : "bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white shadow-sm hover:shadow"
+          }`}
+        >
+          {outOfStock ? "Out of Stock" : "Add to Cart"}
+        </button>
       </div>
     </div>
   );
