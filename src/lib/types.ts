@@ -168,6 +168,9 @@ export type OrderStatus =
 export type PaymentMethod = "cod" | "card" | "bkash" | "nagad";
 export type PaymentStatus = "paid" | "unpaid";
 
+// NOTE: optional fields are `string | undefined` (never null).
+// Checkout leaves empty fields OUT of the saved order, so Firestore
+// never receives undefined or null for them.
 export interface OrderItem {
   productId: string;
   variantId?: string;
@@ -175,7 +178,7 @@ export interface OrderItem {
   name: string;
   price: number;
   quantity: number;
-  image: string;
+  image?: string;
 }
 
 export interface Order {

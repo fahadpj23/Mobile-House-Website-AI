@@ -4,13 +4,13 @@ import { getStorage } from "firebase/storage";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBOXyd-5X9u7ugc_XxSC4j0pJ36c8I70aQ",
-  authDomain: "mobilehousewebsite.firebaseapp.com",
-  databaseURL: "https://mobilehousewebsite-default-rtdb.firebaseio.com",
-  projectId: "mobilehousewebsite",
-  storageBucket: "mobilehousewebsite.firebasestorage.app",
-  messagingSenderId: "27265006915",
-  appId: "1:27265006915:web:8814d2072efca18732c3f6",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 // ── Primary (customer) app ──
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);

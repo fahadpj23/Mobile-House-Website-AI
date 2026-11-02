@@ -42,6 +42,12 @@ export default function CheckoutPage() {
       const orderItems = items.map((i) => {
         const v = i.product.variants?.find((x) => x.id === i.variantId);
 
+        // productId must be a real string (OrderItem.productId is `string`)
+        const productId = i.product.id;
+        if (!productId) {
+          throw new Error(`Product "${i.product.name}" has no id`);
+        }
+
         // Resolve unit price safely
         const unitPrice = v ? v.price : i.product.price;
         if (!Number.isFinite(unitPrice)) {
@@ -67,16 +73,18 @@ export default function CheckoutPage() {
           }
         }
 
+        // Empty fields are LEFT OUT (never null / undefined), so Firestore
+        // accepts it and the types stay simple: `field?: string`
         return {
-          productId: i.product.id ?? null,
-          variantId: i.variantId ?? null,
-          variantLabel: i.variantLabel ?? null,
+          productId, // always a string
+          ...(i.variantId ? { variantId: i.variantId } : {}),
+          ...(i.variantLabel ? { variantLabel: i.variantLabel } : {}),
           name: i.variantLabel
             ? `${i.product.name} (${i.variantLabel})`
             : i.product.name,
           price: unitPrice,
           quantity: i.quantity,
-          image: image || null,
+          ...(image ? { image } : {}),
         };
       });
 
@@ -90,13 +98,14 @@ export default function CheckoutPage() {
         throw new Error("Invalid order total");
       }
 
-      // Sanitize shipping form — convert empty strings to null
+      // Sanitize shipping form — empty notes are left out (not null)
+      const trimmedNotes = form.notes.trim();
       const shipping = {
         name: form.name.trim(),
         phone: form.phone.trim(),
         address: form.address.trim(),
         city: form.city.trim(),
-        notes: form.notes.trim() || null,
+        ...(trimmedNotes ? { notes: trimmedNotes } : {}),
       };
 
       await createOrder({
@@ -136,7 +145,7 @@ export default function CheckoutPage() {
         className="grid lg:grid-cols-12 gap-8 items-start"
       >
         {/* LEFT COLUMN: FORM */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="lg:col-span-7 space-y-6 min-w-0">
           {/* Shipping Info */}
           <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
             <h2 className="font-bold text-lg mb-4 text-gray-900 flex items-center gap-2">
@@ -234,7 +243,7 @@ export default function CheckoutPage() {
         </div>
 
         {/* RIGHT COLUMN: ORDER SUMMARY */}
-        <div className="lg:col-span-5 w-full">
+        <div className="lg:col-span-5 w-full min-w-0">
           <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm sticky top-24">
             <h2 className="font-bold text-lg mb-5 text-gray-900">
               Order Summary
@@ -248,7 +257,7 @@ export default function CheckoutPage() {
                 const unit = v ? v.price : i.product.price;
                 const lineTotal = unit * i.quantity;
 
-                let image = i.product.images[0] || "";
+                let image = i.product.images?.[0] || "";
                 if (v && i.product.options) {
                   const colorOpt = i.product.options.find(
                     (o) => o.type === "color",
@@ -257,7 +266,7 @@ export default function CheckoutPage() {
                     const colorIdx = i.product.options.findIndex(
                       (o) => o.id === colorOpt.id,
                     );
-                    const colorValId = v.optionValueIds[colorIdx];
+                    const colorValId = v.optionValueIds?.[colorIdx];
                     const colorImg = colorOpt.values.find(
                       (cv) => cv.id === colorValId,
                     )?.images?.[0];
@@ -270,12 +279,15 @@ export default function CheckoutPage() {
                     key={key}
                     className="flex gap-3 py-2 border-b border-gray-100 last:border-0"
                   >
-                    <div className="w-14 h-14 rounded-lg border border-gray-200 bg-gray-50 overflow-hidden shrink-0">
+                    {/* Fixed-size box: image is absolute so it can't change layout while loading */}
+                    <div className="relative w-14 h-14 rounded-lg border border-gray-200 bg-gray-50 overflow-hidden shrink-0">
                       {image && (
                         <img
                           src={image}
                           alt=""
-                          className="w-full h-full object-contain p-1"
+                          loading="lazy"
+                          decoding="async"
+                          className="absolute inset-0 w-full h-full max-w-full max-h-full object-contain p-1"
                         />
                       )}
                     </div>
