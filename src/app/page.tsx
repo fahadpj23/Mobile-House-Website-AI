@@ -1,14 +1,17 @@
 // app/page.tsx
 import Link from "next/link";
+import { Suspense } from "react";
 import { getBanners, getCategories } from "@/lib/firestore";
 import BannerCarousel from "@/components/BannerCarousel";
 import FeaturedSection from "@/components/FeaturedSection";
 import MidBannersLazy from "@/components/MidBannersLazy";
+import BottomBannersLazy from "@/components/BottomBannersLazy";
 import SpecialOffersLazy from "@/components/SpecialOffersLazy";
 import MostSellingSection from "@/components/MostSellingSection";
 import CategorySectionLazy from "@/components/CategorySectionLazy";
 
-export const dynamic = "force-dynamic";
+// ✅ Cache the page for 60 seconds.
+export const revalidate = 60;
 
 /* ═══════════════════════════════════════════════════════
    Category icon map — curated emoji per known slug.
@@ -78,9 +81,28 @@ function iconFor(slug: string, name: string): string {
   return "📦";
 }
 
-export default async function HomePage() {
-  // Only fetch what the server truly needs:
-  // hero banners (above the fold) + category list (to decide which lazy sections to render).
+/* ═══════════════════════════════════════════════════════
+   Small skeleton used to isolate each lazy section.
+   ═══════════════════════════════════════════════════════ */
+function SectionSkeleton() {
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="h-8 w-40 bg-gray-200 rounded animate-pulse mb-4" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="h-56 bg-gray-100 rounded-xl animate-pulse" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Data-driven content — each heavy section has its own
+   Suspense boundary so a failure in one doesn't hide the
+   footer CTA (or the sections after it).
+   ═══════════════════════════════════════════════════════ */
+async function HomeData() {
   const [heroBanners, categories] = await Promise.all([
     getBanners("hero"),
     getCategories(),
@@ -88,7 +110,7 @@ export default async function HomePage() {
 
   const activeHeroBanners = heroBanners.filter((b) => b.active);
 
-  /* ────────── Resolve top-level categories for lazy sections ────────── */
+  /* ────────── Resolve top-level categories ────────── */
   const slugToCat: Record<
     string,
     { name: string; parentSlug?: string | null; slug: string }
@@ -132,8 +154,8 @@ export default async function HomePage() {
     });
 
   return (
-    <div className="bg-white">
-      {/* ═══════════ HERO (server-rendered, above the fold) ═══════════ */}
+    <>
+      {/* ═══════════ HERO ═══════════ */}
       {activeHeroBanners.length > 0 ? (
         <BannerCarousel banners={activeHeroBanners} />
       ) : (
@@ -159,12 +181,14 @@ export default async function HomePage() {
             <div className="flex items-center justify-center gap-2.5">
               <Link
                 href="/products"
+                prefetch={true}
                 className="bg-white text-slate-900 px-6 py-2.5 rounded-full font-semibold hover:bg-blue-50 transition text-xs md:text-sm shadow-lg hover:shadow-xl"
               >
                 Shop Now
               </Link>
               <Link
                 href="/products?category=accessories"
+                prefetch={true}
                 className="border border-white/30 text-white px-6 py-2.5 rounded-full font-semibold hover:bg-white/10 transition text-xs md:text-sm backdrop-blur"
               >
                 Browse Accessories
@@ -174,29 +198,39 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* ═══════════ FEATURED (API fires on scroll) ═══════════ */}
-      <FeaturedSection />
+      {/* ═══════════ LAZY SECTIONS — each isolated ═══════════ */}
+      <Suspense fallback={<SectionSkeleton />}>
+        <FeaturedSection />
+      </Suspense>
 
-      {/* ═══════════ MID BANNERS (API fires on scroll) ═══════════ */}
-      <MidBannersLazy />
+      <Suspense fallback={<SectionSkeleton />}>
+        <MidBannersLazy />
+      </Suspense>
 
-      {/* ═══════════ SPECIAL OFFERS (API fires on scroll) ═══════════ */}
-      <SpecialOffersLazy />
+      <Suspense fallback={<SectionSkeleton />}>
+        <SpecialOffersLazy />
+      </Suspense>
 
-      {/* ═══════════ MOST SELLING (API fires on scroll) ═══════════ */}
-      <MostSellingSection />
+      <Suspense fallback={<SectionSkeleton />}>
+        <MostSellingSection />
+      </Suspense>
 
-      {/* ═══════════ CATEGORY SECTIONS (each API fires on its own scroll) ═══════════ */}
       {topLevelCategories.map((cat) => (
-        <CategorySectionLazy
-          key={cat.slug}
-          slug={cat.slug}
-          name={cat.name}
-          icon={iconFor(cat.slug, cat.name)}
-        />
+        <Suspense key={cat.slug} fallback={<SectionSkeleton />}>
+          <CategorySectionLazy
+            slug={cat.slug}
+            name={cat.name}
+            icon={iconFor(cat.slug, cat.name)}
+          />
+        </Suspense>
       ))}
 
-      {/* ═══════════ FOOTER CTA ═══════════ */}
+      {/* ═══════════ BOTTOM BANNERS (admin-managed, position="bottom") ═══════════ */}
+      <Suspense fallback={<SectionSkeleton />}>
+        <BottomBannersLazy />
+      </Suspense>
+
+      {/* ═══════════ FOOTER CTA — always renders ═══════════ */}
       <section className="max-w-7xl mx-auto px-4 pt-3 pb-12">
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 px-6 py-10 md:py-12 text-center text-white">
           <div className="absolute inset-0 opacity-20">
@@ -212,6 +246,7 @@ export default async function HomePage() {
             </p>
             <Link
               href="/products"
+              prefetch={true}
               className="inline-block bg-white text-slate-900 px-6 py-2.5 rounded-full font-semibold hover:bg-blue-50 transition text-xs md:text-sm shadow-lg"
             >
               Explore All Products →
@@ -219,6 +254,46 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Main Page Component
+   ═══════════════════════════════════════════════════════ */
+export default function HomePage() {
+  return (
+    // pb-20 reserves space for mobile fixed bars (sticky buy bar, etc.)
+    <div className="bg-white pb-20 md:pb-0">
+      <Suspense fallback={<HomeSkeleton />}>
+        <HomeData />
+      </Suspense>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   Page-level fallback
+   ═══════════════════════════════════════════════════════ */
+function HomeSkeleton() {
+  return (
+    <div className="w-full">
+      <div className="h-[300px] md:h-[400px] w-full bg-slate-200 animate-pulse" />
+
+      <div className="max-w-7xl mx-auto px-4 py-8 space-y-12">
+        <div className="space-y-4">
+          <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="h-64 bg-gray-100 rounded-xl animate-pulse"
+              />
+            ))}
+          </div>
+        </div>
+        <div className="h-40 w-full bg-gray-100 rounded-xl animate-pulse" />
+      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       {
@@ -11,9 +12,18 @@ const nextConfig = {
     ],
     // Serve modern formats first
     formats: ["image/avif", "image/webp"],
-    // Cache optimized images aggressively (default is 60s in dev, 60 days in prod)
+    // Cache optimized images aggressively
     minimumCacheTTL: 60 * 60 * 24 * 30, // 30 days
+  },
+
+  // Keep visited pages in the browser's client-side cache, so going to
+  // another page and coming back doesn't reload the home page.
+  experimental: {
+    staleTimes: {
+      dynamic: 300, // seconds
+      static: 300,
+    },
   },
 };
 
-module.exports = nextConfig;
+export default nextConfig;

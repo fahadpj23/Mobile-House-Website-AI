@@ -35,55 +35,86 @@ export default function CheckoutPage() {
       toast.error("Cart is empty");
       return;
     }
+
     setLoading(true);
     try {
+      // Build sanitized items — no undefined values allowed in Firestore
+      const orderItems = items.map((i) => {
+        const v = i.product.variants?.find((x) => x.id === i.variantId);
+
+        // Resolve unit price safely
+        const unitPrice = v ? v.price : i.product.price;
+        if (!Number.isFinite(unitPrice)) {
+          throw new Error(
+            `Missing price for "${i.product.name}"${
+              i.variantLabel ? ` (${i.variantLabel})` : ""
+            }`,
+          );
+        }
+
+        // Resolve image (color variant override)
+        let image = i.product.images?.[0] || "";
+        if (v && i.product.options) {
+          const colorOpt = i.product.options.find((o) => o.type === "color");
+          if (colorOpt) {
+            const colorIdx = i.product.options.findIndex(
+              (o) => o.id === colorOpt.id,
+            );
+            const colorValId = v.optionValueIds?.[colorIdx];
+            const colorImg = colorOpt.values.find((cv) => cv.id === colorValId)
+              ?.images?.[0];
+            if (colorImg) image = colorImg;
+          }
+        }
+
+        return {
+          productId: i.product.id ?? null,
+          variantId: i.variantId ?? null,
+          variantLabel: i.variantLabel ?? null,
+          name: i.variantLabel
+            ? `${i.product.name} (${i.variantLabel})`
+            : i.product.name,
+          price: unitPrice,
+          quantity: i.quantity,
+          image: image || null,
+        };
+      });
+
+      // Recompute total from sanitized items (safety net)
+      const computedTotal = orderItems.reduce(
+        (sum, it) => sum + it.price * it.quantity,
+        0,
+      );
+
+      if (!Number.isFinite(computedTotal) || computedTotal <= 0) {
+        throw new Error("Invalid order total");
+      }
+
+      // Sanitize shipping form — convert empty strings to null
+      const shipping = {
+        name: form.name.trim(),
+        phone: form.phone.trim(),
+        address: form.address.trim(),
+        city: form.city.trim(),
+        notes: form.notes.trim() || null,
+      };
+
       await createOrder({
         userId: user.uid,
-        items: items.map((i) => {
-          const v = i.product.variants?.find((x) => x.id === i.variantId);
-
-          // ✅ Save strictly `price` to Firestore
-          const unitPrice = v ? v.price : i.product.price;
-
-          let image = i.product.images[0] || "";
-          if (v && i.product.options) {
-            const colorOpt = i.product.options.find((o) => o.type === "color");
-            if (colorOpt) {
-              const colorIdx = i.product.options.findIndex(
-                (o) => o.id === colorOpt.id,
-              );
-              const colorValId = v.optionValueIds[colorIdx];
-              const colorImg = colorOpt.values.find(
-                (cv) => cv.id === colorValId,
-              )?.images?.[0];
-              if (colorImg) image = colorImg;
-            }
-          }
-
-          return {
-            productId: i.product.id!,
-            variantId: i.variantId,
-            variantLabel: i.variantLabel,
-            name: i.variantLabel
-              ? `${i.product.name} (${i.variantLabel})`
-              : i.product.name,
-            price: unitPrice,
-            quantity: i.quantity,
-            image,
-          };
-        }),
-        total, // ✅ Uses strictly `price` total
+        items: orderItems,
+        total: computedTotal,
         status: "pending",
         paymentMethod: payment,
         paymentStatus: "unpaid",
-        shipping: form,
+        shipping,
       });
+
       clearCart();
       toast.success("Order placed successfully!");
       router.push("/orders");
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to place order");
+    } catch (err: any) {
+      console.error("ORDER ERROR:", err);
+      toast.error(err?.message || "Failed to place order");
     } finally {
       setLoading(false);
     }
@@ -214,7 +245,6 @@ export default function CheckoutPage() {
                 const key = `${i.product.id}__${i.variantId || "base"}`;
                 const v = i.product.variants?.find((x) => x.id === i.variantId);
 
-                // ✅ ALWAYS use base `price`
                 const unit = v ? v.price : i.product.price;
                 const lineTotal = unit * i.quantity;
 
@@ -263,7 +293,6 @@ export default function CheckoutPage() {
                           Qty: {i.quantity}
                         </p>
                         <div className="text-right">
-                          {/* ✅ Only show price. No strikethrough. */}
                           <p className="text-[13px] font-bold text-gray-900 tabular-nums">
                             ₹{lineTotal.toFixed(2)}
                           </p>
@@ -276,7 +305,6 @@ export default function CheckoutPage() {
             </div>
 
             <div className="space-y-2.5 text-sm border-t border-gray-100 pt-4">
-              {/* ✅ Subtotal strictly uses total (price math) */}
               <div className="flex justify-between text-gray-500">
                 <span>Subtotal</span>
                 <span className="text-gray-900 font-semibold tabular-nums">

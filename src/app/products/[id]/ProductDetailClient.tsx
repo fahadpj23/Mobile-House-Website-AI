@@ -252,12 +252,20 @@ function SimilarProducts({
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
         {products.map((p) =>
           p.id ? (
-            <Link key={p.id} href={`/products/${p.id}`} className="group">
+            <Link
+              key={p.id}
+              href={`/products/${p.id}`}
+              className="group min-w-0"
+            >
+              {/* ✅ FIX: image is absolute inside a fixed square box, so it
+                  can never push the layout wider while it is loading */}
               <div className="aspect-square bg-gray-50 rounded-lg overflow-hidden relative mb-3">
                 <img
                   src={p.images?.[0] || "/placeholder.png"}
                   alt={p.name}
-                  className="w-full h-full max-w-full max-h-full object-contain p-4 group-hover:scale-105 transition-transform"
+                  loading="lazy"
+                  decoding="async"
+                  className="absolute inset-0 w-full h-full max-w-full max-h-full object-contain p-4 group-hover:scale-105 transition-transform"
                 />
               </div>
               <h3 className="text-sm font-medium text-gray-900 line-clamp-1">
@@ -282,51 +290,71 @@ function SimilarProducts({
 }
 
 /* ═══════════════════════════════════════════════════════
-   Mobile sticky buy bar
+   Mobile sticky buy bar — Add to Cart + Buy Now
    ═══════════════════════════════════════════════════════ */
 function MobileBuyBar({
   price,
   stock,
   hasVariants,
   onAdd,
+  onBuyNow,
   justAdded,
 }: {
   price: number;
   stock: number;
   hasVariants: boolean;
   onAdd: () => void;
+  onBuyNow: () => void;
   justAdded: boolean;
 }) {
+  const disabled = stock <= 0;
+
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-30 md:hidden bg-white border-t border-gray-200 px-4 py-3 flex items-center gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-      <div className="flex-1 min-w-0">
-        <p className="text-[10px] text-gray-500 uppercase tracking-wide">
+    <div className="fixed bottom-0 left-0 right-0 z-30 md:hidden bg-white border-t border-gray-200 px-3 py-2.5 flex items-center gap-2 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] pb-[calc(0.625rem+env(safe-area-inset-bottom))]">
+      {/* Price block */}
+      <div className="flex-1 min-w-0 pl-1">
+        <p className="text-[10px] text-gray-500 uppercase tracking-wide leading-none">
           Total
         </p>
-        <p className="text-base font-bold text-gray-900 leading-none">
+        <p className="text-base font-bold text-gray-900 leading-tight mt-0.5 truncate">
           ₹{price.toLocaleString()}
         </p>
       </div>
+
+      {/* Add to Cart */}
       <button
         onClick={onAdd}
-        disabled={stock <= 0}
-        className={`h-10 px-4 rounded-lg text-sm font-bold flex items-center justify-center gap-1.5 transition ${
-          stock <= 0
-            ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+        disabled={disabled}
+        className={`h-10 px-3 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1.5 transition min-w-[88px] ${
+          disabled
+            ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-transparent"
             : justAdded
-              ? "bg-green-600 text-white"
-              : "bg-gray-900 text-white active:scale-95"
+              ? "bg-green-50 text-green-700 border-2 border-green-600"
+              : "bg-white border border-gray-300 text-gray-800 active:scale-95"
         }`}
       >
         {justAdded ? (
           <>
-            <Check size={16} /> Added
+            <Check size={14} className="text-green-700" /> Added
           </>
         ) : (
           <>
-            <ShoppingCart size={16} /> {hasVariants ? "Add" : "Add to Cart"}
+            <ShoppingCart size={14} /> {hasVariants ? "Add" : "Add to Cart"}
           </>
         )}
+      </button>
+
+      {/* Buy Now */}
+      <button
+        onClick={onBuyNow}
+        disabled={disabled}
+        className={`h-10 px-3 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1.5 transition min-w-[88px] shadow-sm ${
+          disabled
+            ? "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"
+            : "bg-gray-900 text-white active:scale-95"
+        }`}
+      >
+        <Zap size={14} className="fill-white" /> Buy Now
       </button>
     </div>
   );
@@ -366,7 +394,7 @@ function ImageZoomModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 overflow-hidden"
       onClick={onClose}
     >
       <button
@@ -378,14 +406,14 @@ function ImageZoomModal({
       </button>
 
       <div
-        className="relative w-full max-w-4xl aspect-square flex items-center justify-center"
+        className="relative w-full max-w-4xl max-h-[85vh] aspect-square flex items-center justify-center overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <img
           src={images[activeIndex]}
           alt={`Zoomed view ${activeIndex + 1}`}
           decoding="async"
-          className="max-w-full max-h-[85vh] object-contain"
+          className="max-w-full max-h-[85vh] w-auto h-auto object-contain"
         />
 
         {images.length > 1 && (
@@ -429,7 +457,7 @@ function ImageZoomModal({
                 src={img}
                 alt=""
                 decoding="async"
-                className="w-full h-full max-w-full max-h-full object-cover bg-white"
+                className="absolute inset-0 w-full h-full max-w-full max-h-full object-cover bg-white"
               />
             </button>
           ))}
@@ -598,7 +626,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
     }
   }, []);
 
-  const safeActiveImg = Math.min(activeImg, gallery.length - 1);
+  const safeActiveImg = Math.max(0, Math.min(activeImg, gallery.length - 1));
   const currentImage = gallery[safeActiveImg] || "/placeholder.png";
 
   const imgLoaded = currentImage === loadedSrc;
@@ -644,22 +672,27 @@ export default function ProductDetailClient({ product }: { product: Product }) {
     setQty((q) => q + 1);
   };
 
-  const handleAdd = () => {
+  /* ──────────────── SHARED CART HELPER ────────────────
+     Validates selection/stock and adds the current
+     product + variant + qty to the cart.
+     Returns true on success, false on validation failure.
+  ──────────────────────────────────────────────────── */
+  const addCurrentSelectionToCart = (): boolean => {
     if (hasVariants && !activeVariant) {
       toast.error("Please select all options");
-      return;
+      return false;
     }
     if (hasVariants && (!activeVariant!.enabled || activeVariant!.stock <= 0)) {
       toast.error("This variant is out of stock");
-      return;
+      return false;
     }
     if (stock <= 0) {
       toast.error("Out of stock");
-      return;
+      return false;
     }
     if (qty > stock) {
       toast.error(`Only ${stock} in stock`);
-      return;
+      return false;
     }
 
     const trimmedSuffix = variantSuffix.trim();
@@ -680,10 +713,25 @@ export default function ProductDetailClient({ product }: { product: Product }) {
       selectedOptions,
     });
 
+    return true;
+  };
+
+  /* ──────────────── ADD TO CART (stays on page) ───────
+     Shows a brief "Added" state on buttons — no redirect.
+  ──────────────────────────────────────────────────── */
+  const handleAdd = () => {
+    if (!addCurrentSelectionToCart()) return;
+
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 1200);
 
-    toast.success("Added to cart — heading to checkout");
+    toast.success("Added to cart");
+  };
+
+  /* ──────────────── BUY NOW (adds + redirects) ────────
+  ──────────────────────────────────────────────────── */
+  const handleBuyNow = () => {
+    if (!addCurrentSelectionToCart()) return;
     router.push("/checkout");
   };
 
@@ -737,6 +785,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
   const handleScroll = () => {
     if (!scrollContainerRef.current) return;
     const { scrollLeft, clientWidth } = scrollContainerRef.current;
+    if (!clientWidth) return;
     const newIndex = Math.round(scrollLeft / clientWidth);
     if (newIndex !== activeImg) {
       setActiveImg(newIndex);
@@ -764,34 +813,47 @@ export default function ProductDetailClient({ product }: { product: Product }) {
 
   return (
     <>
-      {/* Added top padding for breathing room */}
-      <div className="w-full pt-8 md:pt-12">
+      {/*
+        ✅ FIX: overflow-x-clip (NOT overflow-x-hidden) so anything that
+        briefly grows wider than the screen while loading is clipped,
+        without breaking the sticky image column on desktop.
+      */}
+      <div className="w-full max-w-full overflow-x-clip pt-8 md:pt-12">
+        {/* ✅ FIX: grid children below have min-w-0 so a big image can't stretch the columns */}
         <div className="grid md:grid-cols-5 gap-0 md:gap-10 items-start">
           {/* ─────────── IMAGE COLUMN (2/5) ─────────── */}
-          <div className="md:col-span-2 w-full max-w-[480px] mx-auto flex justify-center md:sticky md:top-28 md:self-start">
-            <div className="w-full">
-              <div className="relative group w-full">
+          <div className="min-w-0 md:col-span-2 w-full max-w-[480px] mx-auto flex justify-center md:sticky md:top-28 md:self-start">
+            <div className="w-full min-w-0">
+              <div className="relative group w-full min-w-0">
                 {/* MOBILE SLIDER */}
-                <div className="block md:hidden w-full">
+                <div className="block md:hidden w-full min-w-0">
                   <div
                     ref={scrollContainerRef}
                     onScroll={handleScroll}
-                    className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide w-full aspect-square bg-gray-50"
+                    className="flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hide w-full max-w-full aspect-square bg-gray-50"
                   >
                     {gallery.map((img, i) => (
+                      /* ✅ FIX: fixed-size slide, image is absolute inside it,
+                         so the image can never change the slide's size
+                         while it is still loading */
                       <div
                         key={i}
-                        className="w-full h-full shrink-0 snap-center relative flex items-center justify-center p-4"
+                        className="relative basis-full w-full min-w-full shrink-0 grow-0 snap-center overflow-hidden"
                       >
                         {imgError ? (
-                          <AlertTriangle size={32} className="text-gray-400" />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <AlertTriangle
+                              size={32}
+                              className="text-gray-400"
+                            />
+                          </div>
                         ) : (
                           <img
                             src={img}
                             alt={`${displayTitle} - ${i + 1}`}
+                            loading={i === 0 ? "eager" : "lazy"}
                             decoding="async"
-                            // ✅ max-h-full ceiling; max-w-none preserves existing scroll fix
-                            className="w-full h-full max-w-none max-h-full object-contain cursor-zoom-in"
+                            className="absolute inset-0 w-full h-full max-w-full max-h-full object-contain p-4 cursor-zoom-in"
                             onClick={() => setIsZoomOpen(true)}
                           />
                         )}
@@ -838,7 +900,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                 </div>
 
                 {/* DESKTOP IMAGE */}
-                <div className="hidden md:flex justify-center w-full">
+                <div className="hidden md:flex justify-center w-full min-w-0">
                   <div className="relative aspect-square w-full max-w-[440px] overflow-hidden bg-gray-50 rounded-3xl">
                     {imgError ? (
                       <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
@@ -849,9 +911,9 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                       <>
                         {showSkeleton && <ImageSkeleton />}
                         {/*
-                          ✅ FIX: no remounting key, transition-opacity only,
+                          no remounting key, transition-opacity only,
                           no scale on the img, decoding="async",
-                          hard max-w-full / max-h-full ceiling
+                          absolute + hard max-w-full / max-h-full ceiling
                         */}
                         <img
                           src={currentImage}
@@ -955,7 +1017,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
           </div>
 
           {/* ─────────── CONTENT COLUMN (3/5) ─────────── */}
-          <div className="md:col-span-3 px-4 md:px-0 py-4 md:py-0">
+          <div className="min-w-0 md:col-span-3 px-4 md:px-0 py-4 md:py-0">
             {!infoReady ? (
               <InfoSkeleton />
             ) : (
@@ -995,7 +1057,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
                 </div>
 
                 {/* Product title */}
-                <h1 className="text-[22px] md:text-[28px] font-bold mb-3 leading-tight text-gray-900 tracking-tight">
+                <h1 className="text-[22px] md:text-[28px] font-bold mb-3 leading-tight text-gray-900 tracking-tight break-words">
                   {displayTitle}
                 </h1>
 
@@ -1171,7 +1233,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
 
                   {/* Buy Now (Compact Solid) - Fixed width to avoid stretching */}
                   <button
-                    onClick={handleAdd}
+                    onClick={handleBuyNow}
                     disabled={stock <= 0}
                     className={`w-[100px] h-9 rounded-lg text-[12px] font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm ${
                       stock <= 0
@@ -1211,7 +1273,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
 
                 {/* Description */}
                 {product.description && (
-                  <p className="text-[14px] text-gray-600 leading-relaxed mb-6">
+                  <p className="text-[14px] text-gray-600 leading-relaxed mb-6 break-words">
                     {product.description}
                   </p>
                 )}
@@ -1240,6 +1302,7 @@ export default function ProductDetailClient({ product }: { product: Product }) {
           stock={stock}
           hasVariants={hasVariants}
           onAdd={handleAdd}
+          onBuyNow={handleBuyNow}
           justAdded={justAdded}
         />
       )}
