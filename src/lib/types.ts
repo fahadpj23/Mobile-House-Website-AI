@@ -133,6 +133,8 @@ export interface Product {
   variants?: ProductVariant[];
   createdAt?: any;
   updatedAt?: any;
+  isNewArrival?: boolean;
+  isTopSelling?: boolean;
 }
 
 export interface Banner {
