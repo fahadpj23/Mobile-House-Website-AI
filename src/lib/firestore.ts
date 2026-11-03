@@ -248,7 +248,7 @@ export const createOrder = async (order: Omit<Order, "id">) => {
   // ============================================================
   // STEP 1: Decrement stock (transactional, atomic per product)
   // ============================================================
-  for (const [productId, totalQty] of productQty) {
+  for (const [productId, totalQty] of Array.from(productQty.entries())) {
     const productRef = doc(db, "websiteProducts", productId);
 
     await runTransaction(db, async (tx) => {
@@ -329,7 +329,7 @@ export const decrementStockForOrder = async (cartItems: CartLine[]) => {
     }
   }
 
-  for (const [productId, totalQty] of productQty) {
+  for (const [productId, totalQty] of Array.from(productQty.entries())) {
     const prodRef = doc(db, "websiteProducts", productId);
     await runTransaction(db, async (tx) => {
       const snap = await tx.get(prodRef);
@@ -393,7 +393,7 @@ export const restoreStockForOrder = async (cartItems: CartLine[]) => {
     }
   }
 
-  for (const [productId, totalQty] of productQty) {
+  for (const [productId, totalQty] of Array.from(productQty.entries())) {
     const prodRef = doc(db, "websiteProducts", productId);
     await runTransaction(db, async (tx) => {
       const snap = await tx.get(prodRef);
