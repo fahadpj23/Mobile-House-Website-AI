@@ -11,6 +11,8 @@ import {
   where,
   orderBy,
   setDoc,
+  runTransaction,
+  increment,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { deleteImageByUrl, deleteImagesByUrl } from "./storage";
@@ -195,31 +197,233 @@ export const deleteBrand = async (id: string) => {
 };
 
 // ============================================================
+// STOCK MANAGEMENT (shared types)
+// ============================================================
+type CartLine = {
+  product: {
+    id: string;
+    name?: string;
+    variants?: { id: string; stock: number; enabled?: boolean }[];
+  };
+  variantId?: string;
+  quantity: number;
+};
+
+/**
+ * Internal: recompute product.stock from its variants.
+ * Matches ProductForm: sum of enabled variants' stock.
+ */
+function computeAggregateStock(variants: any[]): number {
+  return variants
+    .filter((v) => v.enabled !== false)
+    .reduce((s, v) => s + (Number(v.stock) || 0), 0);
+}
+
+// ============================================================
 // ORDERS
 // ============================================================
+/**
+ * Creates the order AND decrements stock atomically per product.
+ * - Uses runTransaction per product so two simultaneous checkouts
+ *   cannot oversell.
+ * - Also increments totalSold in the same transaction.
+ *
+ * Throws if any product has insufficient stock.
+ */
 export const createOrder = async (order: Omit<Order, "id">) => {
+  // Pre-group quantities by product & variant
+  const productQty = new Map<string, number>();
+  const variantQty = new Map<string, number>();
+
+  for (const item of order.items) {
+    const pid = item.productId;
+    if (!pid) continue;
+    productQty.set(pid, (productQty.get(pid) || 0) + item.quantity);
+    if (item.variantId) {
+      const k = `${pid}::${item.variantId}`;
+      variantQty.set(k, (variantQty.get(k) || 0) + item.quantity);
+    }
+  }
+
+  // ============================================================
+  // STEP 1: Decrement stock (transactional, atomic per product)
+  // ============================================================
+  for (const [productId, totalQty] of productQty) {
+    const productRef = doc(db, "websiteProducts", productId);
+
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(productRef);
+      if (!snap.exists()) {
+        throw new Error(`Product ${productId} no longer exists`);
+      }
+
+      const data = snap.data() as any;
+      const hasVariants =
+        Array.isArray(data.variants) && data.variants.length > 0;
+
+      if (!hasVariants) {
+        const current = Number(data.stock) || 0;
+        if (current < totalQty) {
+          throw new Error(
+            `Insufficient stock for "${data.name}" — only ${current} left`,
+          );
+        }
+        tx.update(productRef, {
+          stock: current - totalQty,
+          totalSold: increment(totalQty),
+        });
+        return;
+      }
+
+      // Variant path — decrement each variant, recompute aggregate
+      const updatedVariants = data.variants.map((v: any) => {
+        const key = `${productId}::${v.id}`;
+        const dec = variantQty.get(key) || 0;
+        if (dec === 0) return v;
+
+        const current = Number(v.stock) || 0;
+        if (current < dec) {
+          throw new Error(
+            `Insufficient stock for "${data.name}" (variant ${v.id}) — only ${current} left`,
+          );
+        }
+        return { ...v, stock: current - dec };
+      });
+
+      tx.update(productRef, {
+        variants: updatedVariants,
+        stock: computeAggregateStock(updatedVariants),
+        totalSold: increment(totalQty),
+      });
+    });
+  }
+
+  // ============================================================
+  // STEP 2: Write the order document
+  // ============================================================
   const orderRef = await addDoc(collection(db, "orders"), {
     ...order,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   });
 
-  for (const item of order.items) {
-    try {
-      const productRef = doc(db, "websiteProducts", item.productId);
-      const productSnap = await getDoc(productRef);
-      if (productSnap.exists()) {
-        const currentSold = productSnap.data().totalSold || 0;
-        await updateDoc(productRef, {
-          totalSold: currentSold + item.quantity,
-        });
-      }
-    } catch (err) {
-      console.error("Failed to update totalSold for", item.productId, err);
+  return orderRef;
+};
+
+/**
+ * Exposed separately so the CheckoutPage can reserve stock BEFORE
+ * createOrder and roll back if the order write fails.
+ * (For the simplest flow, createOrder already does both — see CheckoutPage.)
+ */
+export const decrementStockForOrder = async (cartItems: CartLine[]) => {
+  const productQty = new Map<string, number>();
+  const variantQty = new Map<string, number>();
+
+  for (const line of cartItems) {
+    const pid = line.product.id;
+    if (!pid) continue;
+    productQty.set(pid, (productQty.get(pid) || 0) + line.quantity);
+    if (line.variantId) {
+      const k = `${pid}::${line.variantId}`;
+      variantQty.set(k, (variantQty.get(k) || 0) + line.quantity);
     }
   }
 
-  return orderRef;
+  for (const [productId, totalQty] of productQty) {
+    const prodRef = doc(db, "websiteProducts", productId);
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(prodRef);
+      if (!snap.exists()) throw new Error(`Product ${productId} not found`);
+
+      const data = snap.data() as any;
+      const hasVariants =
+        Array.isArray(data.variants) && data.variants.length > 0;
+
+      if (!hasVariants) {
+        const current = Number(data.stock) || 0;
+        if (current < totalQty) {
+          throw new Error(
+            `Insufficient stock for "${data.name}" — only ${current} left`,
+          );
+        }
+        tx.update(prodRef, {
+          stock: current - totalQty,
+          totalSold: increment(totalQty),
+        });
+        return;
+      }
+
+      const updatedVariants = data.variants.map((v: any) => {
+        const key = `${productId}::${v.id}`;
+        const dec = variantQty.get(key) || 0;
+        if (dec === 0) return v;
+        const current = Number(v.stock) || 0;
+        if (current < dec) {
+          throw new Error(
+            `Insufficient stock for "${data.name}" (variant ${v.id}) — only ${current} left`,
+          );
+        }
+        return { ...v, stock: current - dec };
+      });
+
+      tx.update(prodRef, {
+        variants: updatedVariants,
+        stock: computeAggregateStock(updatedVariants),
+        totalSold: increment(totalQty),
+      });
+    });
+  }
+};
+
+/**
+ * Best-effort rollback: adds stock back + decrements totalSold.
+ * Used when createOrder fails after decrementStockForOrder.
+ */
+export const restoreStockForOrder = async (cartItems: CartLine[]) => {
+  const productQty = new Map<string, number>();
+  const variantQty = new Map<string, number>();
+
+  for (const line of cartItems) {
+    const pid = line.product.id;
+    if (!pid) continue;
+    productQty.set(pid, (productQty.get(pid) || 0) + line.quantity);
+    if (line.variantId) {
+      const k = `${pid}::${line.variantId}`;
+      variantQty.set(k, (variantQty.get(k) || 0) + line.quantity);
+    }
+  }
+
+  for (const [productId, totalQty] of productQty) {
+    const prodRef = doc(db, "websiteProducts", productId);
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(prodRef);
+      if (!snap.exists()) return;
+
+      const data = snap.data() as any;
+      const hasVariants =
+        Array.isArray(data.variants) && data.variants.length > 0;
+
+      if (!hasVariants) {
+        tx.update(prodRef, {
+          stock: (Number(data.stock) || 0) + totalQty,
+          totalSold: increment(-totalQty),
+        });
+        return;
+      }
+
+      const updatedVariants = data.variants.map((v: any) => {
+        const key = `${productId}::${v.id}`;
+        const inc = variantQty.get(key) || 0;
+        return inc ? { ...v, stock: (Number(v.stock) || 0) + inc } : v;
+      });
+
+      tx.update(prodRef, {
+        variants: updatedVariants,
+        stock: computeAggregateStock(updatedVariants),
+        totalSold: increment(-totalQty),
+      });
+    });
+  }
 };
 
 export const getOrders = async (): Promise<Order[]> => {

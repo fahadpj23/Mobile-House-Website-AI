@@ -38,17 +38,15 @@ export default function CheckoutPage() {
 
     setLoading(true);
     try {
-      // Build sanitized items — no undefined values allowed in Firestore
+      // ── Build sanitized items — no undefined values in Firestore ──
       const orderItems = items.map((i) => {
         const v = i.product.variants?.find((x) => x.id === i.variantId);
 
-        // productId must be a real string (OrderItem.productId is `string`)
         const productId = i.product.id;
         if (!productId) {
           throw new Error(`Product "${i.product.name}" has no id`);
         }
 
-        // Resolve unit price safely
         const unitPrice = v ? v.price : i.product.price;
         if (!Number.isFinite(unitPrice)) {
           throw new Error(
@@ -73,10 +71,8 @@ export default function CheckoutPage() {
           }
         }
 
-        // Empty fields are LEFT OUT (never null / undefined), so Firestore
-        // accepts it and the types stay simple: `field?: string`
         return {
-          productId, // always a string
+          productId,
           ...(i.variantId ? { variantId: i.variantId } : {}),
           ...(i.variantLabel ? { variantLabel: i.variantLabel } : {}),
           name: i.variantLabel
@@ -108,6 +104,13 @@ export default function CheckoutPage() {
         ...(trimmedNotes ? { notes: trimmedNotes } : {}),
       };
 
+      // ============================================================
+      // ✅ createOrder now handles:
+      //    - stock decrement (atomic, per product & per variant)
+      //    - totalSold increment
+      //    - order document write
+      //    - throws if any product has insufficient stock
+      // ============================================================
       await createOrder({
         userId: user.uid,
         items: orderItems,
@@ -279,7 +282,7 @@ export default function CheckoutPage() {
                     key={key}
                     className="flex gap-3 py-2 border-b border-gray-100 last:border-0"
                   >
-                    {/* Fixed-size box: image is absolute so it can't change layout while loading */}
+                    {/* Fixed-size box so image can't shift layout */}
                     <div className="relative w-14 h-14 rounded-lg border border-gray-200 bg-gray-50 overflow-hidden shrink-0">
                       {image && (
                         <img

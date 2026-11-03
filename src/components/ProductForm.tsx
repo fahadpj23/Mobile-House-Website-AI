@@ -100,7 +100,8 @@ export default function ProductForm({ initialData }: Props) {
       specifications: loadedSpecs,
       highlights: initialData?.highlights || ([] as string[]),
       isSpecialOffer: initialData?.isSpecialOffer || false,
-      isFeatured: initialData?.isFeatured || false,
+      isNewArrival: initialData?.isNewArrival || false,
+      isTopSelling: initialData?.isTopSelling || false,
       totalSold: initialData?.totalSold ? String(initialData.totalSold) : "",
       series: initialData?.series || "",
       seriesName: initialData?.seriesName || "",
@@ -396,7 +397,8 @@ export default function ProductForm({ initialData }: Props) {
         images: form.images,
         specifications: cleanedSpecs,
         isSpecialOffer: form.isSpecialOffer,
-        isFeatured: form.isFeatured,
+        isNewArrival: form.isNewArrival,
+        isTopSelling: form.isTopSelling,
         totalSold: totalSoldNum,
       };
 
@@ -851,12 +853,23 @@ export default function ProductForm({ initialData }: Props) {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={form.isFeatured}
+                  checked={form.isNewArrival}
                   onChange={(e) =>
-                    setForm({ ...form, isFeatured: e.target.checked })
+                    setForm({ ...form, isNewArrival: e.target.checked })
                   }
                 />
-                <span className="text-sm font-medium">Featured Product</span>
+                <span className="text-sm font-medium">New Arrival</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.isTopSelling}
+                  onChange={(e) =>
+                    setForm({ ...form, isTopSelling: e.target.checked })
+                  }
+                />
+                <span className="text-sm font-medium">Top Selling</span>
               </label>
             </div>
           </div>

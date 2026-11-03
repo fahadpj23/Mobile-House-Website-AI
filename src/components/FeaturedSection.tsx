@@ -22,7 +22,7 @@ export default function FeaturedSection() {
               <div className="min-w-0">
                 <h2 className="text-base md:text-lg font-bold text-gray-900 tracking-tight flex items-center gap-1.5">
                   <span className="text-lg">⭐</span>
-                  <span className="truncate">Featured Products</span>
+                  <span className="truncate">Special Offer</span>
                 </h2>
               </div>
             </div>
