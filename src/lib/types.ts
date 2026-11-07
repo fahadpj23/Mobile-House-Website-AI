@@ -97,7 +97,6 @@ export interface ProductVariant {
   price: number;
   mrp?: number;
   stock: number;
-  /** Per-variant gallery. If empty, storefront falls back to color images. */
   images?: string[];
   enabled: boolean;
 }
@@ -134,7 +133,7 @@ export interface Product {
   createdAt?: any;
   updatedAt?: any;
   isNewArrival?: boolean;
-  isTopSelling?: boolean;
+  isMostSelling?: boolean; // ← renamed from isTopSelling
 }
 
 export interface Banner {
@@ -170,9 +169,6 @@ export type OrderStatus =
 export type PaymentMethod = "cod" | "card" | "bkash" | "nagad";
 export type PaymentStatus = "paid" | "unpaid";
 
-// NOTE: optional fields are `string | undefined` (never null).
-// Checkout leaves empty fields OUT of the saved order, so Firestore
-// never receives undefined or null for them.
 export interface OrderItem {
   productId: string;
   variantId?: string;

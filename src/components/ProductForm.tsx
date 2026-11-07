@@ -34,7 +34,6 @@ import {
   ChevronDown,
   ChevronRight,
   Sparkles,
-  ImagePlus,
 } from "lucide-react";
 import CreatableCombobox from "./CreatableCombobox";
 import VariantEditor from "./VariantEditor";
@@ -101,7 +100,7 @@ export default function ProductForm({ initialData }: Props) {
       highlights: initialData?.highlights || ([] as string[]),
       isSpecialOffer: initialData?.isSpecialOffer || false,
       isNewArrival: initialData?.isNewArrival || false,
-      isTopSelling: initialData?.isTopSelling || false,
+      isMostSelling: initialData?.isMostSelling || false, // renamed
       totalSold: initialData?.totalSold ? String(initialData.totalSold) : "",
       series: initialData?.series || "",
       seriesName: initialData?.seriesName || "",
@@ -272,7 +271,6 @@ export default function ProductForm({ initialData }: Props) {
   const removeImage = (idx: number) =>
     setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== idx) }));
 
-  // ✅ FIXED: Explicitly set placeholder and required to avoid Firestore undefined errors
   const addSpec = (group = "General") =>
     setForm((f) => ({
       ...f,
@@ -296,7 +294,6 @@ export default function ProductForm({ initialData }: Props) {
       specifications: f.specifications.filter((_, idx) => idx !== i),
     }));
 
-  // ===== Highlights =====
   const addHighlight = () =>
     setForm((f) => ({ ...f, highlights: [...f.highlights, ""] }));
 
@@ -355,15 +352,14 @@ export default function ProductForm({ initialData }: Props) {
       }
     }
 
-    // ✅ FIXED: Clean specs and ensure NO undefined values slip through
     const cleanedSpecs = form.specifications
       .filter((s) => s.key.trim() && s.value.trim())
       .map(({ key, value, placeholder, required, group }) => ({
         key: key.trim(),
         value: value.trim(),
-        placeholder: placeholder ?? "", // fallback to empty string
-        required: !!required, // force boolean
-        group: group ?? "General", // fallback to "General"
+        placeholder: placeholder ?? "",
+        required: !!required,
+        group: group ?? "General",
       }));
 
     const cleanedHighlights = form.highlights
@@ -398,9 +394,13 @@ export default function ProductForm({ initialData }: Props) {
         specifications: cleanedSpecs,
         isSpecialOffer: form.isSpecialOffer,
         isNewArrival: form.isNewArrival,
-        isTopSelling: form.isTopSelling,
-        totalSold: totalSoldNum,
+        isMostSelling: form.isMostSelling, // renamed from isTopSelling
       };
+
+      // totalSold is owned by orders on edit; only set it on create.
+      if (!isEdit) {
+        payload.totalSold = totalSoldNum;
+      }
 
       if (finalMrp !== undefined) payload.mrp = finalMrp;
       if (form.series) payload.series = form.series;
@@ -801,26 +801,35 @@ export default function ProductForm({ initialData }: Props) {
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-sm text-gray-600">
-                    Total Sold (auto-updates on orders)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="0"
-                    className="input"
-                    value={form.totalSold}
-                    onChange={(e) =>
-                      setForm({ ...form, totalSold: e.target.value })
-                    }
-                  />
-                </div>
+                {!isEdit ? (
+                  <div>
+                    <label className="text-sm text-gray-600">
+                      Total Sold (auto-updates on orders)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      className="input"
+                      value={form.totalSold}
+                      onChange={(e) =>
+                        setForm({ ...form, totalSold: e.target.value })
+                      }
+                    />
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-700">
+                    <b>Total Sold:</b> {initialData?.totalSold ?? 0}{" "}
+                    <span className="text-xs text-gray-400">
+                      — managed automatically by orders; not editable
+                    </span>
+                  </div>
+                )}
               </>
             )}
           </div>
 
-          {/* VARIANTS — VariantEditor handles per-variant images + generate at bottom */}
+          {/* VARIANTS */}
           <VariantEditor
             basePrice={toNum(form.price) || 0}
             baseMrp={toNum(form.mrp) || undefined}
@@ -864,12 +873,12 @@ export default function ProductForm({ initialData }: Props) {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={form.isTopSelling}
+                  checked={form.isMostSelling}
                   onChange={(e) =>
-                    setForm({ ...form, isTopSelling: e.target.checked })
+                    setForm({ ...form, isMostSelling: e.target.checked })
                   }
                 />
-                <span className="text-sm font-medium">Top Selling</span>
+                <span className="text-sm font-medium">Most Selling 🔥</span>
               </label>
             </div>
           </div>
@@ -931,7 +940,7 @@ export default function ProductForm({ initialData }: Props) {
             </div>
           )}
 
-          {/* SPECIFICATIONS (grouped, per-group "Add field") */}
+          {/* SPECIFICATIONS */}
           <div className="card p-5 space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="font-bold text-lg">Specifications</h2>
@@ -990,7 +999,6 @@ export default function ProductForm({ initialData }: Props) {
   );
 }
 
-// ===== Grouped spec block with per-group "Add field" =====
 function SpecGroupBlock({
   group,
   items,

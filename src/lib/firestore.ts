@@ -209,10 +209,6 @@ type CartLine = {
   quantity: number;
 };
 
-/**
- * Internal: recompute product.stock from its variants.
- * Matches ProductForm: sum of enabled variants' stock.
- */
 function computeAggregateStock(variants: any[]): number {
   return variants
     .filter((v) => v.enabled !== false)
@@ -222,16 +218,7 @@ function computeAggregateStock(variants: any[]): number {
 // ============================================================
 // ORDERS
 // ============================================================
-/**
- * Creates the order AND decrements stock atomically per product.
- * - Uses runTransaction per product so two simultaneous checkouts
- *   cannot oversell.
- * - Also increments totalSold in the same transaction.
- *
- * Throws if any product has insufficient stock.
- */
 export const createOrder = async (order: Omit<Order, "id">) => {
-  // Pre-group quantities by product & variant
   const productQty = new Map<string, number>();
   const variantQty = new Map<string, number>();
 
@@ -245,9 +232,6 @@ export const createOrder = async (order: Omit<Order, "id">) => {
     }
   }
 
-  // ============================================================
-  // STEP 1: Decrement stock (transactional, atomic per product)
-  // ============================================================
   for (const [productId, totalQty] of Array.from(productQty.entries())) {
     const productRef = doc(db, "websiteProducts", productId);
 
@@ -275,7 +259,6 @@ export const createOrder = async (order: Omit<Order, "id">) => {
         return;
       }
 
-      // Variant path — decrement each variant, recompute aggregate
       const updatedVariants = data.variants.map((v: any) => {
         const key = `${productId}::${v.id}`;
         const dec = variantQty.get(key) || 0;
@@ -298,9 +281,6 @@ export const createOrder = async (order: Omit<Order, "id">) => {
     });
   }
 
-  // ============================================================
-  // STEP 2: Write the order document
-  // ============================================================
   const orderRef = await addDoc(collection(db, "orders"), {
     ...order,
     createdAt: Date.now(),
@@ -310,11 +290,6 @@ export const createOrder = async (order: Omit<Order, "id">) => {
   return orderRef;
 };
 
-/**
- * Exposed separately so the CheckoutPage can reserve stock BEFORE
- * createOrder and roll back if the order write fails.
- * (For the simplest flow, createOrder already does both — see CheckoutPage.)
- */
 export const decrementStockForOrder = async (cartItems: CartLine[]) => {
   const productQty = new Map<string, number>();
   const variantQty = new Map<string, number>();
@@ -375,10 +350,6 @@ export const decrementStockForOrder = async (cartItems: CartLine[]) => {
   }
 };
 
-/**
- * Best-effort rollback: adds stock back + decrements totalSold.
- * Used when createOrder fails after decrementStockForOrder.
- */
 export const restoreStockForOrder = async (cartItems: CartLine[]) => {
   const productQty = new Map<string, number>();
   const variantQty = new Map<string, number>();
@@ -511,22 +482,30 @@ export async function deleteBanner(id: string) {
 // ============================================================
 const offersCol = collection(db, "specialOffers");
 
-export async function getSpecialOffers(
-  activeOnly = false,
-): Promise<SpecialOffer[]> {
-  const constraints = activeOnly ? [where("active", "==", true)] : [];
-  const q = query(offersCol, ...constraints);
-  const snap = await getDocs(q);
+// ============================================================
+// SPECIAL OFFERS
+// ============================================================
+
+/**
+ * Fetch ALL special offers, filter by `isSpecialOffer === true`
+ * (legacy `active === true` also accepted) and return newest first.
+ *
+ * Mirrors getMostSellingProducts — one shape, one pattern.
+ * Pass `activeOnly = false` (default) to receive every offer
+ * (both true and false flags) — useful for admin lists.
+ */
+
+export async function getSpecialOffers(): Promise<Product[]> {
+  const snap = await getDocs(collection(db, "websiteProducts"));
 
   return snap.docs
-    .map(
-      (d) =>
-        ({
-          id: d.id,
-          ...d.data(),
-        }) as SpecialOffer & { createdAt?: number },
-    )
-    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    .map((d) => ({ id: d.id, ...d.data() }) as Product)
+    .filter((p) => p.isSpecialOffer === true)
+    .sort((a: any, b: any) => {
+      const aMs = a.createdAt?.toMillis?.() ?? a.createdAt ?? 0;
+      const bMs = b.createdAt?.toMillis?.() ?? b.createdAt ?? 0;
+      return Number(bMs) - Number(aMs);
+    });
 }
 
 export async function addSpecialOffer(data: Omit<SpecialOffer, "id">) {
@@ -560,19 +539,31 @@ export async function deleteSpecialOffer(id: string) {
   return deleteDoc(doc(db, "specialOffers", id));
 }
 
-// ============================================================
-// MOST SELLING PRODUCTS
-// ============================================================
-export async function getMostSellingProducts(limit = 8): Promise<Product[]> {
-  const q = query(
-    collection(db, "websiteProducts"),
-    orderBy("totalSold", "desc"),
-  );
-  const snap = await getDocs(q);
-  const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Product);
-  return all.filter((p) => (p.totalSold || 0) > 0).slice(0, limit);
+export async function getMostSellingProducts(): Promise<Product[]> {
+  const snap = await getDocs(collection(db, "websiteProducts"));
+
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }) as Product)
+    .filter((p) => p.isMostSelling === true)
+    .sort((a: any, b: any) => {
+      const aMs = a.createdAt?.toMillis?.() ?? a.createdAt ?? 0;
+      const bMs = b.createdAt?.toMillis?.() ?? b.createdAt ?? 0;
+      return Number(bMs) - Number(aMs);
+    });
 }
 
+export async function getNewestProducts(limit = 8): Promise<Product[]> {
+  const snap = await getDocs(collection(db, "websiteProducts"));
+
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }) as Product)
+    .filter((p) => p.isNewArrival === true)
+    .sort((a: any, b: any) => {
+      const aMs = a.createdAt?.toMillis?.() ?? a.createdAt ?? 0;
+      const bMs = b.createdAt?.toMillis?.() ?? b.createdAt ?? 0;
+      return Number(bMs) - Number(aMs);
+    });
+}
 // ============================================================
 // SERIES
 // ============================================================

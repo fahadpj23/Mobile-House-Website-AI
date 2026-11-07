@@ -9,6 +9,7 @@ import BottomBannersLazy from "@/components/BottomBannersLazy";
 import SpecialOffersLazy from "@/components/SpecialOffersLazy";
 import MostSellingSection from "@/components/MostSellingSection";
 import CategorySectionLazy from "@/components/CategorySectionLazy";
+import SpecialOfferSection from "@/components/SpecialOffersSection";
 
 // ✅ Cache the page for 60 seconds.
 export const revalidate = 60;
@@ -200,15 +201,11 @@ async function HomeData() {
 
       {/* ═══════════ LAZY SECTIONS — each isolated ═══════════ */}
       <Suspense fallback={<SectionSkeleton />}>
-        <FeaturedSection />
+        <SpecialOfferSection />
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton />}>
         <MidBannersLazy />
-      </Suspense>
-
-      <Suspense fallback={<SectionSkeleton />}>
-        <SpecialOffersLazy />
       </Suspense>
 
       <Suspense fallback={<SectionSkeleton />}>
