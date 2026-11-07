@@ -52,12 +52,7 @@ const links: {
   },
   { href: "/admin/brands", label: "Brands", icon: Tag, section: "brands" },
   { href: "/admin/banners", label: "Banners", icon: Image, section: "banners" },
-  {
-    href: "/admin/offers",
-    label: "Special Offers",
-    icon: Percent,
-    section: "offers",
-  },
+
   {
     href: "/admin/orders",
     label: "Orders",

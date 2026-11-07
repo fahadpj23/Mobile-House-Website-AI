@@ -100,7 +100,7 @@ export default function ProductForm({ initialData }: Props) {
       highlights: initialData?.highlights || ([] as string[]),
       isSpecialOffer: initialData?.isSpecialOffer || false,
       isNewArrival: initialData?.isNewArrival || false,
-      isMostSelling: initialData?.isMostSelling || false, // renamed
+      isMostSelling: initialData?.isMostSelling || false,
       totalSold: initialData?.totalSold ? String(initialData.totalSold) : "",
       series: initialData?.series || "",
       seriesName: initialData?.seriesName || "",
@@ -394,7 +394,7 @@ export default function ProductForm({ initialData }: Props) {
         specifications: cleanedSpecs,
         isSpecialOffer: form.isSpecialOffer,
         isNewArrival: form.isNewArrival,
-        isMostSelling: form.isMostSelling, // renamed from isTopSelling
+        isMostSelling: form.isMostSelling,
       };
 
       // totalSold is owned by orders on edit; only set it on create.
@@ -469,9 +469,12 @@ export default function ProductForm({ initialData }: Props) {
   }, [form.specifications]);
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-4xl space-y-5">
+    <form
+      onSubmit={handleSubmit}
+      className="w-full max-w-7xl space-y-4 sm:space-y-5"
+    >
       {/* STEP 1: CATEGORY PICKER */}
-      <div className="card p-5 space-y-3">
+      <div className="card p-4 sm:p-5 space-y-3">
         <div className="flex items-center gap-2">
           <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">
             1
@@ -479,7 +482,7 @@ export default function ProductForm({ initialData }: Props) {
           <h2 className="font-bold text-lg">Choose Category *</h2>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {dropdownLevels.map((lvl, idx) => {
             const value = path[idx] || "";
             return (
@@ -504,13 +507,13 @@ export default function ProductForm({ initialData }: Props) {
         </div>
 
         {path.length > 0 && (
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-gray-500 break-words">
             Path: {path.map((s) => slugToCat[s]?.name || s).join(" › ")}
           </p>
         )}
 
         {!categoryConfirmed && (
-          <div className="flex items-center gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 pt-2">
             <button
               type="button"
               disabled={!canConfirm}
@@ -523,7 +526,7 @@ export default function ProductForm({ initialData }: Props) {
                 }
                 setCategoryConfirmed(true);
               }}
-              className="btn-primary disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="btn-primary w-full sm:w-auto disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
               Continue →
             </button>
@@ -550,7 +553,7 @@ export default function ProductForm({ initialData }: Props) {
       {categoryConfirmed && templatesLoaded && (
         <>
           {/* BASIC INFO */}
-          <div className="card p-5 space-y-3">
+          <div className="card p-4 sm:p-5 space-y-3">
             <div className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">
                 2
@@ -575,106 +578,110 @@ export default function ProductForm({ initialData }: Props) {
               }
             />
 
-            <div>
-              <label className="text-sm text-gray-600">Brand *</label>
-              <CreatableCombobox
-                items={brands.map((b) => ({
-                  id: b.id ?? b.name,
-                  name: b.name,
-                  value: b.name,
-                }))}
-                value={form.brand}
-                placeholder="Select or add a brand"
-                emptyHint="No brand found."
-                onCreateLabel={(q) => `Add brand "${q}"`}
-                onChange={(val) => setForm((f) => ({ ...f, brand: val || "" }))}
-                onCreate={async (name) => {
-                  const trimmed = name.trim();
-                  const found = brands.find(
-                    (b) => b.name.toLowerCase() === trimmed.toLowerCase(),
-                  );
-                  if (found) {
-                    setForm((f) => ({ ...f, brand: found.name }));
-                    toast(`"${found.name}" already exists — selected it.`);
-                    return;
+            <div className="grid md:grid-cols-2 gap-3 md:gap-4">
+              <div>
+                <label className="text-sm text-gray-600">Brand *</label>
+                <CreatableCombobox
+                  items={brands.map((b) => ({
+                    id: b.id ?? b.name,
+                    name: b.name,
+                    value: b.name,
+                  }))}
+                  value={form.brand}
+                  placeholder="Select or add a brand"
+                  emptyHint="No brand found."
+                  onCreateLabel={(q) => `Add brand "${q}"`}
+                  onChange={(val) =>
+                    setForm((f) => ({ ...f, brand: val || "" }))
                   }
-                  try {
-                    const created = await addBrand(trimmed);
-                    setBrands((prev) =>
-                      [...prev, created].sort((a, b) =>
-                        a.name.localeCompare(b.name),
-                      ),
+                  onCreate={async (name) => {
+                    const trimmed = name.trim();
+                    const found = brands.find(
+                      (b) => b.name.toLowerCase() === trimmed.toLowerCase(),
                     );
-                    setForm((f) => ({ ...f, brand: created.name }));
-                    toast.success(`Brand "${created.name}" added`);
-                  } catch {
-                    toast.error("Failed to add brand");
-                  }
-                }}
-              />
-            </div>
+                    if (found) {
+                      setForm((f) => ({ ...f, brand: found.name }));
+                      toast(`"${found.name}" already exists — selected it.`);
+                      return;
+                    }
+                    try {
+                      const created = await addBrand(trimmed);
+                      setBrands((prev) =>
+                        [...prev, created].sort((a, b) =>
+                          a.name.localeCompare(b.name),
+                        ),
+                      );
+                      setForm((f) => ({ ...f, brand: created.name }));
+                      toast.success(`Brand "${created.name}" added`);
+                    } catch {
+                      toast.error("Failed to add brand");
+                    }
+                  }}
+                />
+              </div>
 
-            <div className="pt-2 border-t border-gray-100">
-              <label className="text-sm text-gray-600">Series</label>
-              <CreatableCombobox
-                items={allSeries.map((s) => ({
-                  id: s.id ?? s.slug,
-                  name: s.name,
-                  value: s.slug,
-                }))}
-                value={form.series}
-                placeholder="Select or add a series"
-                emptyHint="No series found."
-                onCreateLabel={(q) => `Add series "${q}"`}
-                onChange={(val) => {
-                  const s = allSeries.find((x) => x.slug === val);
-                  setForm((f) => ({
-                    ...f,
-                    series: s?.slug || "",
-                    seriesName: s?.name || "",
-                  }));
-                }}
-                onCreate={async (name) => {
-                  const trimmed = name.trim();
-                  const found = allSeries.find(
-                    (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
-                  );
-                  if (found) {
+              <div>
+                <label className="text-sm text-gray-600">Series</label>
+                <CreatableCombobox
+                  items={allSeries.map((s) => ({
+                    id: s.id ?? s.slug,
+                    name: s.name,
+                    value: s.slug,
+                  }))}
+                  value={form.series}
+                  placeholder="Select or add a series"
+                  emptyHint="No series found."
+                  onCreateLabel={(q) => `Add series "${q}"`}
+                  onChange={(val) => {
+                    const s = allSeries.find((x) => x.slug === val);
                     setForm((f) => ({
                       ...f,
-                      series: found.slug,
-                      seriesName: found.name,
+                      series: s?.slug || "",
+                      seriesName: s?.name || "",
                     }));
-                    toast(`"${found.name}" already exists — selected it.`);
-                    return;
-                  }
-                  try {
-                    const created = await addSeries(trimmed);
-                    setAllSeries((prev) =>
-                      [...prev, created].sort((a, b) =>
-                        a.name.localeCompare(b.name),
-                      ),
+                  }}
+                  onCreate={async (name) => {
+                    const trimmed = name.trim();
+                    const found = allSeries.find(
+                      (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
                     );
-                    setForm((f) => ({
-                      ...f,
-                      series: created.slug,
-                      seriesName: created.name,
-                    }));
-                    toast.success(`Series "${created.name}" added`);
-                  } catch {
-                    toast.error("Failed to add series");
-                  }
-                }}
-              />
-              <p className="text-xs text-gray-400 mt-1">
-                Group related models: S26, S26 Plus, S26 Ultra → "S26 Series"
-              </p>
+                    if (found) {
+                      setForm((f) => ({
+                        ...f,
+                        series: found.slug,
+                        seriesName: found.name,
+                      }));
+                      toast(`"${found.name}" already exists — selected it.`);
+                      return;
+                    }
+                    try {
+                      const created = await addSeries(trimmed);
+                      setAllSeries((prev) =>
+                        [...prev, created].sort((a, b) =>
+                          a.name.localeCompare(b.name),
+                        ),
+                      );
+                      setForm((f) => ({
+                        ...f,
+                        series: created.slug,
+                        seriesName: created.name,
+                      }));
+                      toast.success(`Series "${created.name}" added`);
+                    } catch {
+                      toast.error("Failed to add series");
+                    }
+                  }}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Group related models: S26, S26 Plus, S26 Ultra → "S26 Series"
+                </p>
+              </div>
             </div>
           </div>
 
           {/* MANUAL HIGHLIGHTS */}
-          <div className="card p-5 space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="card p-4 sm:p-5 space-y-3">
+            <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Sparkles size={18} className="text-amber-500" />
                 <h2 className="font-bold text-lg">Product Highlights</h2>
@@ -682,7 +689,7 @@ export default function ProductForm({ initialData }: Props) {
               <button
                 type="button"
                 onClick={addHighlight}
-                className="text-blue-600 text-sm flex items-center gap-1"
+                className="text-blue-600 text-sm flex items-center gap-1 shrink-0"
               >
                 <Plus size={14} /> Add highlight
               </button>
@@ -698,14 +705,14 @@ export default function ProductForm({ initialData }: Props) {
                 No highlights yet. Click <b>Add highlight</b> to create one.
               </p>
             ) : (
-              <div className="space-y-2">
+              <div className="grid lg:grid-cols-2 gap-2">
                 {form.highlights.map((h, i) => (
                   <div key={i} className="flex gap-2 items-center">
-                    <span className="text-xs text-gray-400 w-6 text-right">
+                    <span className="text-xs text-gray-400 w-6 text-right shrink-0">
                       {i + 1}.
                     </span>
                     <input
-                      className="input flex-1"
+                      className="input flex-1 min-w-0"
                       placeholder="e.g. 5000 mAh battery, 67W fast charging"
                       value={h}
                       onChange={(e) => updateHighlight(i, e.target.value)}
@@ -713,7 +720,7 @@ export default function ProductForm({ initialData }: Props) {
                     <button
                       type="button"
                       onClick={() => removeHighlight(i)}
-                      className="text-red-500 hover:text-red-700"
+                      className="text-red-500 hover:text-red-700 p-1.5 shrink-0"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -724,7 +731,7 @@ export default function ProductForm({ initialData }: Props) {
           </div>
 
           {/* PRICING & STOCK */}
-          <div className="card p-5 space-y-3">
+          <div className="card p-4 sm:p-5 space-y-3">
             <h2 className="font-bold text-lg">Pricing & Stock</h2>
 
             {hasVariants ? (
@@ -759,11 +766,12 @@ export default function ProductForm({ initialData }: Props) {
               </div>
             ) : (
               <>
-                <div className="grid md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
                     <label className="text-sm text-gray-600">MRP (₹)</label>
                     <input
                       type="number"
+                      inputMode="numeric"
                       min={0}
                       placeholder="0"
                       className="input"
@@ -777,6 +785,7 @@ export default function ProductForm({ initialData }: Props) {
                     <label className="text-sm text-gray-600">Price (₹) *</label>
                     <input
                       type="number"
+                      inputMode="numeric"
                       min={0}
                       placeholder="0"
                       className="input"
@@ -790,6 +799,7 @@ export default function ProductForm({ initialData }: Props) {
                     <label className="text-sm text-gray-600">Stock *</label>
                     <input
                       type="number"
+                      inputMode="numeric"
                       min={0}
                       placeholder="0"
                       className="input"
@@ -799,32 +809,36 @@ export default function ProductForm({ initialData }: Props) {
                       }
                     />
                   </div>
-                </div>
 
-                {!isEdit ? (
-                  <div>
-                    <label className="text-sm text-gray-600">
-                      Total Sold (auto-updates on orders)
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder="0"
-                      className="input"
-                      value={form.totalSold}
-                      onChange={(e) =>
-                        setForm({ ...form, totalSold: e.target.value })
-                      }
-                    />
-                  </div>
-                ) : (
-                  <div className="text-sm text-gray-700">
-                    <b>Total Sold:</b> {initialData?.totalSold ?? 0}{" "}
-                    <span className="text-xs text-gray-400">
-                      — managed automatically by orders; not editable
-                    </span>
-                  </div>
-                )}
+                  {!isEdit ? (
+                    <div className="col-span-2 md:col-span-1">
+                      <label className="text-sm text-gray-600">
+                        Total Sold
+                      </label>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        placeholder="0"
+                        className="input"
+                        value={form.totalSold}
+                        onChange={(e) =>
+                          setForm({ ...form, totalSold: e.target.value })
+                        }
+                      />
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        Auto-updates on orders
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="col-span-2 md:col-span-1 text-sm text-gray-700 self-end pb-2">
+                      <b>Total Sold:</b> {initialData?.totalSold ?? 0}
+                      <p className="text-[11px] text-gray-400">
+                        Managed automatically by orders
+                      </p>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -843,9 +857,9 @@ export default function ProductForm({ initialData }: Props) {
           />
 
           {/* TAGS */}
-          <div className="card p-5 space-y-3">
+          <div className="card p-4 sm:p-5 space-y-3">
             <h2 className="font-bold text-lg">Product Tags</h2>
-            <div className="flex flex-wrap gap-6">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:gap-6">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -885,8 +899,8 @@ export default function ProductForm({ initialData }: Props) {
 
           {/* IMAGES */}
           {!hasVariantImages ? (
-            <div className="card p-5 space-y-3">
-              <div className="flex justify-between items-center">
+            <div className="card p-4 sm:p-5 space-y-3">
+              <div className="flex justify-between items-center gap-2">
                 <h2 className="font-bold text-lg">Images *</h2>
                 <label className="btn-outline flex items-center gap-2 cursor-pointer text-sm">
                   <Upload size={16} />
@@ -911,7 +925,7 @@ export default function ProductForm({ initialData }: Props) {
                   No images yet. Upload at least one.
                 </p>
               ) : (
-                <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
                   {form.images.map((img, i) => (
                     <div key={i} className="relative group">
                       <img
@@ -922,7 +936,7 @@ export default function ProductForm({ initialData }: Props) {
                       <button
                         type="button"
                         onClick={() => removeImage(i)}
-                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition"
+                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 md:opacity-0 md:group-hover:opacity-100 transition"
                       >
                         <X size={14} />
                       </button>
@@ -932,7 +946,7 @@ export default function ProductForm({ initialData }: Props) {
               )}
             </div>
           ) : (
-            <div className="card p-5 bg-blue-50 border border-blue-200">
+            <div className="card p-4 sm:p-5 bg-blue-50 border border-blue-200">
               <p className="text-sm text-blue-800">
                 <b>Images are provided by the variants.</b> The storefront
                 gallery will show each variant's uploaded images.
@@ -941,7 +955,7 @@ export default function ProductForm({ initialData }: Props) {
           )}
 
           {/* SPECIFICATIONS */}
-          <div className="card p-5 space-y-4">
+          <div className="card p-4 sm:p-5 space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="font-bold text-lg">Specifications</h2>
             </div>
@@ -960,7 +974,7 @@ export default function ProductForm({ initialData }: Props) {
                 </button>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="grid xl:grid-cols-2 gap-4 items-start">
                 {groupedFormSpecs.map(({ group, items }) => (
                   <SpecGroupBlock
                     key={group}
@@ -975,12 +989,12 @@ export default function ProductForm({ initialData }: Props) {
             )}
           </div>
 
-          {/* SUBMIT */}
-          <div className="flex gap-3">
+          {/* SUBMIT — sticky on mobile */}
+          <div className="sticky bottom-0 z-10 -mx-4 sm:mx-0 px-4 sm:px-0 py-3 bg-white/95 backdrop-blur border-t sm:border-0 sm:bg-transparent sm:backdrop-blur-none flex gap-3">
             <button
               type="submit"
               disabled={saving || uploading}
-              className="btn-primary flex items-center gap-2 disabled:bg-gray-400"
+              className="btn-primary flex-1 sm:flex-none flex items-center justify-center gap-2 disabled:bg-gray-400"
             >
               <Save size={16} />
               {saving ? "Saving..." : isEdit ? "Update Product" : "Add Product"}
@@ -988,7 +1002,7 @@ export default function ProductForm({ initialData }: Props) {
             <button
               type="button"
               onClick={() => router.back()}
-              className="btn-outline"
+              className="btn-outline flex-1 sm:flex-none"
             >
               Cancel
             </button>
@@ -1031,7 +1045,7 @@ function SpecGroupBlock({
         <button
           type="button"
           onClick={onAddField}
-          className="text-blue-600 text-xs flex items-center gap-1 hover:text-blue-800"
+          className="text-blue-600 text-xs flex items-center gap-1 hover:text-blue-800 py-1"
           title={`Add a field under "${group}"`}
         >
           <Plus size={13} /> Add field
@@ -1039,40 +1053,47 @@ function SpecGroupBlock({
       </div>
 
       {!collapsed && (
-        <div className="p-3 space-y-2">
+        <div className="p-3 space-y-3 sm:space-y-2">
           {items.length === 0 ? (
             <p className="text-xs text-gray-400 px-1">
               No fields yet — click "Add field" above.
             </p>
           ) : (
             items.map(({ index, spec }) => (
-              <div key={index} className="flex gap-2 items-center">
+              <div
+                key={index}
+                className="flex flex-col sm:flex-row gap-2 sm:items-center pb-3 sm:pb-0 border-b border-gray-100 sm:border-0 last:border-0 last:pb-0"
+              >
                 <input
                   placeholder="Key (e.g. Brand)"
-                  className="input"
+                  className="input sm:w-2/5"
                   value={spec.key}
                   onChange={(e) => onUpdate(index, "key", e.target.value)}
                 />
-                <input
-                  placeholder={spec.placeholder || "Value"}
-                  className={`input ${
-                    spec.required && !spec.value.trim() ? "border-red-300" : ""
-                  }`}
-                  value={spec.value}
-                  onChange={(e) => onUpdate(index, "value", e.target.value)}
-                />
-                {spec.required && (
-                  <span className="text-[10px] text-red-500 font-medium whitespace-nowrap">
-                    Required
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => onRemove(index)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  <Trash2 size={18} />
-                </button>
+                <div className="flex gap-2 items-center flex-1 min-w-0">
+                  <input
+                    placeholder={spec.placeholder || "Value"}
+                    className={`input flex-1 min-w-0 ${
+                      spec.required && !spec.value.trim()
+                        ? "border-red-300"
+                        : ""
+                    }`}
+                    value={spec.value}
+                    onChange={(e) => onUpdate(index, "value", e.target.value)}
+                  />
+                  {spec.required && (
+                    <span className="text-[10px] text-red-500 font-medium whitespace-nowrap">
+                      Required
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onRemove(index)}
+                    className="text-red-500 hover:text-red-700 p-1.5 shrink-0"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
               </div>
             ))
           )}
