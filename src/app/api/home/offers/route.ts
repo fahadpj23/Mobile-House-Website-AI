@@ -7,7 +7,7 @@ export const revalidate = 0;
 
 export async function GET() {
   try {
-    const offers = await getSpecialOffers(true);
+    const offers = await getSpecialOffers();
 
     return NextResponse.json(offers, {
       headers: { "Cache-Control": "no-store, max-age=0" },
